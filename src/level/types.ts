@@ -41,6 +41,20 @@ export interface KeyData {
   position: Vec3;
 }
 
+export type PickupKind = 'shield' | 'energy' | 'missiles';
+
+export interface PickupData {
+  kind: PickupKind;
+  segment: number;
+  position: Vec3;
+}
+
+/** Stationary destructible practice target (stand-in until robots exist). */
+export interface TargetData {
+  segment: number;
+  position: Vec3;
+}
+
 export interface LevelData {
   name: string;
   vertices: Vec3[];
@@ -49,4 +63,6 @@ export interface LevelData {
   lights: LightData[];
   doors: DoorData[];
   keys: KeyData[];
+  pickups: PickupData[];
+  targets: TargetData[];
 }

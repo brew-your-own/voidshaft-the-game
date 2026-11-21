@@ -33,9 +33,17 @@ export class Ship {
   private rollVel = 0;
 
   constructor(private readonly level: Level) {
-    const start = level.data.playerStart;
+    this.segment = level.data.playerStart.segment;
+    this.reset();
+  }
+
+  /** Back to the level's start position, at rest. */
+  reset(): void {
+    const start = this.level.data.playerStart;
     this.position.set(...start.position);
     this.prevPosition.copy(this.position);
+    this.velocity.set(0, 0, 0);
+    this.rollVel = 0;
     this.quaternion.setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(...start.forward).normalize());
     this.segment = start.segment;
   }

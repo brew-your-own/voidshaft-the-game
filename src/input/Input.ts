@@ -6,6 +6,10 @@ export interface FlightControls {
   pitch: number; // keyboard pitch, -1..1 (nose up +)
   yaw: number; // keyboard yaw, -1..1 (left +)
   boost: boolean;
+  /** Primary weapon (laser): left mouse. */
+  firePrimary: boolean;
+  /** Secondary weapon (missile): right mouse or X. */
+  fireSecondary: boolean;
 }
 
 /** Keyboard + pointer-locked mouse. Keys use KeyboardEvent.code (layout independent). */
@@ -62,6 +66,8 @@ export class Input {
       pitch: axis(['ArrowDown'], ['ArrowUp']),
       yaw: axis(['ArrowLeft'], ['ArrowRight']),
       boost: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      firePrimary: this.locked && this.buttons.has(0),
+      fireSecondary: this.locked && (this.buttons.has(2) || this.keys.has('KeyX')),
     };
   }
 }

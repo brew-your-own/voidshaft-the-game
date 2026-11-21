@@ -45,3 +45,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
   position: absolute; left: 50%; top: 30%; transform: translateX(-50%); opacity: 0;
   font-size: 20px; letter-spacing: 0.3em; transition: opacity 0.4s; text-shadow: 0 0 10px currentColor;
 }
+.gauge { position: absolute; bottom: 18px; width: 220px; font-size: 12px; letter-spacing: 0.2em; }
+.gauge.shield { left: 18px; color: #2e7bff; }
+.gauge.energy { right: 18px; color: #ffa31a; text-align: right; }
+.gauge label { display: block; margin-bottom: 4px; }
+.gauge .bar { height: 8px; border: 1px solid currentColor; box-shadow: 0 0 8px currentColor; }
+.gauge.energy .bar { transform: scaleX(-1); }
+.gauge .bar i { display: block; height: 100%; background: currentColor; box-shadow: 0 0 10px currentColor; transition: width 0.15s; }
+.gauge span { display: block; margin-top: 4px; font-size: 18px; }
+.gauge.low { animation: blink 0.5s steps(2) infinite; }
+.gauge.shield.low { color: #ff2a4d; }
+.weapons { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: 0.2em; color: #ff2bd6; line-height: 1.6; }

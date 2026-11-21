@@ -1,6 +1,8 @@
 import { Vector3 } from 'three';
 import { BOX_SIGNS, OPPOSITE, SIDE_VERTS, partnerVertex } from './geometry';
-import type { DoorData, KeyColor, KeyData, LevelData, LightData, SegmentData, Vec3 } from './types';
+import type {
+  DoorData, KeyColor, KeyData, LevelData, LightData, PickupData, PickupKind, SegmentData, TargetData, Vec3,
+} from './types';
 
 export interface ExtrudeOptions {
   /** Distance the new face is pushed out along the side's outward normal. */
@@ -23,6 +25,8 @@ export class LevelBuilder {
   private readonly lights: LightData[] = [];
   private readonly doors: DoorData[] = [];
   private readonly keys: KeyData[] = [];
+  private readonly pickups: PickupData[] = [];
+  private readonly targets: TargetData[] = [];
 
   addBox(center: Vec3, size: Vec3, color: number): number {
     const verts = BOX_SIGNS.map(([sx, sy, sz]) =>
@@ -87,10 +91,24 @@ export class LevelBuilder {
     this.doors.push({ segment: seg, side, key });
   }
 
+  /** Places a powerup at the segment centre (plus offset). */
+  pickup(seg: number, kind: PickupKind, offset: Vec3 = [0, 0, 0]): void {
+    this.pickups.push({ kind, segment: seg, position: this.at(seg, offset) });
+  }
+
+  /** Places a practice target at the segment centre (plus offset). */
+  target(seg: number, offset: Vec3 = [0, 0, 0]): void {
+    this.targets.push({ segment: seg, position: this.at(seg, offset) });
+  }
+
   /** Places a key pickup at the segment centre (plus offset). */
   key(seg: number, color: KeyColor, offset: Vec3 = [0, 0, 0]): void {
+    this.keys.push({ color, segment: seg, position: this.at(seg, offset) });
+  }
+
+  private at(seg: number, offset: Vec3): Vec3 {
     const c = this.center(seg);
-    this.keys.push({ color, segment: seg, position: [c.x + offset[0], c.y + offset[1], c.z + offset[2]] });
+    return [c.x + offset[0], c.y + offset[1], c.z + offset[2]];
   }
 
   center(seg: number): Vector3 {
@@ -109,6 +127,8 @@ export class LevelBuilder {
       lights: [...this.lights],
       doors: [...this.doors],
       keys: [...this.keys],
+      pickups: [...this.pickups],
+      targets: [...this.targets],
     };
   }
 

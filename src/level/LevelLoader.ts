@@ -37,8 +37,13 @@ export function validateLevel(data: LevelData): string[] {
       errors.push(`door at ${d.segment}:${d.side} is not on a portal`);
     }
   }
-  for (const k of data.keys) {
-    if (k.segment < 0 || k.segment >= nSeg) errors.push(`key ${k.color}: segment out of range`);
+  const things = [
+    ...data.keys.map((k) => ({ what: `key ${k.color}`, segment: k.segment })),
+    ...(data.pickups ?? []).map((p) => ({ what: `pickup ${p.kind}`, segment: p.segment })),
+    ...(data.targets ?? []).map((t, i) => ({ what: `target ${i}`, segment: t.segment })),
+  ];
+  for (const t of things) {
+    if (t.segment < 0 || t.segment >= nSeg) errors.push(`${t.what}: segment out of range`);
   }
   return errors;
 }

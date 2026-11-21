@@ -110,6 +110,28 @@ export class Level {
     return doors;
   }
 
+  /**
+   * Whether the straight line a→b stays inside the level and doesn't cross
+   * a closed door. Walks the line in short steps tracking the segment.
+   */
+  lineOfSight(a: Vector3, segA: number, b: Vector3, step = 0.75): boolean {
+    const dist = a.distanceTo(b);
+    const n = Math.max(1, Math.ceil(dist / step));
+    const p = new Vector3();
+    let seg = segA;
+    for (let i = 1; i <= n; i++) {
+      p.lerpVectors(a, b, i / n);
+      const next = this.findSegment(p, seg);
+      if (next < 0) return false;
+      if (next !== seg) {
+        const side = this.segments[seg].children.indexOf(next);
+        if (side >= 0 && this.doorAt(seg, side)?.solid) return false;
+      }
+      seg = next;
+    }
+    return true;
+  }
+
   /** Smallest signed distance from p to the segment's side planes (>0 = inside). */
   containment(p: Vector3, seg: number): number {
     let min = Infinity;

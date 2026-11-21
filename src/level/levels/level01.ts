@@ -15,11 +15,15 @@ export function buildLevel01(): LevelData {
   // Hangar where the player starts.
   const hangar = b.addBox([0, 0, 0], [12, 8, 12], cyan);
   b.addLight(hangar, cyan, 60, 30);
+  // Firing range: practice targets at the far end of the hangar.
+  b.target(hangar, [-3, 1, 4]);
+  b.target(hangar, [3, -1, 4]);
 
   // Main corridor heading +z, narrowing then ramping up.
   let s = b.extrude(hangar, SIDE.FRONT, { length: 6, scale: 0.6, color: magenta });
   s = b.tunnel(s, SIDE.FRONT, [{ length: 10 }, { length: 8, shift: [0, 4, 0] }, { length: 6 }]);
   b.addLight(s, magenta, 30, 25);
+  b.target(s);
 
   // Right turn into an amber service duct that snakes a little.
   const ductStart = b.extrude(s, SIDE.RIGHT, { length: 8, color: amber });
@@ -30,6 +34,8 @@ export function buildLevel01(): LevelData {
     { length: 6 },
   ]);
   b.addLight(duct, amber, 30, 25);
+  b.pickup(duct, 'energy');
+  b.target(ductStart);
 
   // Vertical shaft, behind a red door.
   let shaft = b.extrude(duct, SIDE.TOP, { length: 8, color: lime });
@@ -43,6 +49,11 @@ export function buildLevel01(): LevelData {
   const cap = b.extrude(hub, SIDE.TOP, { length: 4, scale: 0.45 });
   b.addLight(hub, violet, 90, 40);
   b.addLight(cap, cyan, 20, 15);
+  b.target(hub, [-4, 2, 0]);
+  b.target(hub, [4, -2, 3]);
+  b.target(hub, [0, 4, -4]);
+  b.pickup(hub, 'shield', [0, -5, 0]);
+  b.pickup(cap, 'missiles');
 
   // Branches out of the hub.
   // Doors go on the narrow necks, not on the room walls.
@@ -56,6 +67,7 @@ export function buildLevel01(): LevelData {
     { length: 8, shift: [4, 0, 0] },
   ]);
   b.key(vault, 'gold');
+  b.pickup(vault, 'missiles', [0, 0, -2]);
 
   // Side tunnel from the hangar: low, twisting crawlspace.
   const crawlNeck = b.extrude(hangar, SIDE.LEFT, { length: 6, scale: 0.5, color: amber });
@@ -67,6 +79,8 @@ export function buildLevel01(): LevelData {
   b.door(crawlNeck, SIDE.LEFT);
   b.addLight(crawl, amber, 25, 20);
   b.key(crawl, 'red');
+  b.pickup(crawl, 'energy', [0, -1, 2]);
+  b.pickup(crawl, 'shield', [0, -1, -2]);
 
   // Small alcove behind the start.
   b.extrude(hangar, SIDE.BACK, { length: 5, scale: 0.7, color: violet });
