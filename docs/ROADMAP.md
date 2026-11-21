@@ -2,7 +2,7 @@
 
 An original in-browser 6DOF tunnel shooter, inspired by Descent (1995): you fly freely through enclosed mines, fight robots, collect keys, destroy a reactor and escape before the mine collapses. The game uses no Descent names, levels or assets.
 
-_Status as of 2026-11-22: milestones 1–8 (the vertical slice) and 11 (enemy designs) are done, on `master`. Next: 9, a level selector with a map viewer, then 10, five bigger levels._
+_Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 10, five bigger levels._
 
 ## Decisions
 
@@ -28,9 +28,9 @@ _Status as of 2026-11-22: milestones 1–8 (the vertical slice) and 11 (enemy de
 | 6 | Objective loop: reactor, countdown, escape | ✅ Done | `2a42b42` |
 | 7 | HUD, audio, menus, settings | ✅ Done | `6766f7b` |
 | 8 | Polish: performance, automap | ✅ Done | `4e47e0f` |
-| 9 | Level selector and map viewer | ⏳ Next | — |
-| 10 | Five bigger levels | Planned | — |
-| 11 | Enemy ship designs | ✅ Done | _uncommitted_ |
+| 9 | Level selector and map viewer | ✅ Done | _uncommitted_ |
+| 10 | Five bigger levels | ⏳ Next | — |
+| 11 | Enemy ship designs | ✅ Done | `2e03707` |
 
 ### What each milestone delivered
 
@@ -82,7 +82,13 @@ _Status as of 2026-11-22: milestones 1–8 (the vertical slice) and 11 (enemy de
 - **Bundle:** Three.js is split into two cacheable chunks; the game code is 89 kB, and the build no longer warns.
 - **Automap** (Tab, rebindable): a wireframe of every segment you have seen, in each segment's accent colour, with doors in their key colour, the exit (red when sealed, green when open), uncollected keys, the reactor and your ship. The mouse turns the view around the ship; the wheel or the forward/back keys zoom. The game is paused while the map is open, including the escape countdown.
 
-**11. Enemy ship designs** (done before 9 and 10)
+**9. Level selector and map viewer**
+- `npm run levels` also writes `public/levels/index.json`: each level's id, name and counts, in the order of `LEVEL_SOURCES`.
+- **Title screen:** one row per level, with its size and robot count. The loaded level has FLY; the others have LOAD, which reloads the page with `?level=` (so a second click on FLY starts it). Every row has MAP. The last level picked is remembered (`voidshaft.level` in local storage); an explicit `?level=` wins.
+- **Map viewer** (`src/ui/MapViewer.ts`): the whole level as a wireframe, using the automap renderer in an overview mode that frames the level's centre. It marks the start, doors (exit in green), keys, the reactor and every robot by type. Drag to turn, right-drag or Shift-drag to pan, wheel to zoom, Esc or BACK to return. It can show any level, not just the loaded one.
+- Map markers now grow when zoomed out, in the viewer and the in-game map.
+
+**11. Enemy ship designs** (done before 10)
 - Nine proposals, three per robot type, were compared on a turntable page. The picks:
   - **Stinger, "Mantis":** needle body with two mandible blades sweeping forward past the nose like pincers, LEDs along the blade edges, red eye slit.
   - **Bulwark, "Obelisk":** tall armoured diamond with one big cyclops eye, circled by a turning ring of four gun pods.
@@ -94,16 +100,6 @@ _Status as of 2026-11-22: milestones 1–8 (the vertical slice) and 11 (enemy de
 - **Shipyard:** `/shipyard.html` (dev server only) shows every robot model on a turntable at true scale, next to any proposals in `src/entities/robots/proposals.ts`. Click a name for a close-up, drag to turn it, ← → to step through, R for the collision sphere. The six unpicked proposals are in git history.
 
 ## Next
-
-### 9. Level selector and map viewer
-
-- **Level list:** `npm run levels` also writes `public/levels/index.json`, listing each level's id, name, number of segments and robots.
-- **Title screen:** a level picker replaces the single FLY button: one row per level, with FLY and VIEW MAP buttons. The choice goes into `?level=` and is remembered.
-- **Map viewer:** reuses `AutomapView` to show a whole level without playing it:
-  - every segment visible;
-  - the camera orbits the level's centre rather than the ship;
-  - markers for the start, keys, doors, robots (by type), the reactor and the exit.
-- **Why first:** milestones 10 and 11 need it, to review new levels and enemies at a glance.
 
 ### 10. Five bigger levels
 
@@ -155,7 +151,7 @@ _Status as of 2026-11-22: milestones 1–8 (the vertical slice) and 11 (enemy de
 ```bash
 npm install
 npm run dev      # dev server (5173, or the next free port)
-npm test         # 64 Vitest tests over 8 files
+npm test         # 67 Vitest tests over 9 files
 npm run build    # exports levels, type-checks, builds to dist/
 ```
 

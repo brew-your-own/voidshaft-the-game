@@ -14,6 +14,8 @@ import { GameEffects } from '../fx/GameEffects';
 import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
 import { MapMemory } from '../level/automap';
+import { LEVEL_STORAGE_KEY, type LevelSummary } from '../level/levelIndex';
+import { loadLevel } from '../level/LevelLoader';
 import { Level, type DoorState } from '../level/Level';
 import { buildLevelMesh } from '../level/LevelMesh';
 import type { KeyColor, LevelData, PickupKind } from '../level/types';
@@ -25,6 +27,7 @@ import { createNeonEnvironment } from '../render/NeonEnvironment';
 import { createRenderer, type RenderContext } from '../render/Renderer';
 import { ResolutionGovernor } from '../render/Resolution';
 import { HUD } from '../ui/HUD';
+import { MapViewer } from '../ui/MapViewer';
 import { Menu } from '../ui/Menu';
 import { Objective } from './Objective';
 import { Player } from './Player';
@@ -86,8 +89,14 @@ export class Game {
   private readonly mapMemory: MapMemory;
   private readonly automap: AutomapView;
   private mapOpen = false;
+  private readonly viewer: MapViewer;
 
-  constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, levelData: LevelData) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    hudRoot: HTMLElement,
+    levelData: LevelData,
+    levels: { list: LevelSummary[]; current: string } = { list: [], current: 'level01' },
+  ) {
     this.ctx = createRenderer(canvas, this.scene, this.camera);
     // Robot hulls reflect a neon room; level walls are unaffected.
     setRobotEnvironment(createNeonEnvironment(this.ctx.renderer));
@@ -103,6 +112,17 @@ export class Game {
         this.audio.unlock();
         this.audio.play('uiClick');
       },
+      onSelectLevel: (id) => {
+        try { localStorage.setItem(LEVEL_STORAGE_KEY, id); } catch { /* storage blocked */ }
+        const url = new URL(window.location.href);
+        url.searchParams.set('level', id);
+        window.location.assign(url);
+      },
+      onViewMap: (id) => this.openViewer(id, levels.current === id ? levelData : null),
+    }, levels);
+    this.viewer = new MapViewer(hudRoot, canvas, () => {
+      hudRoot.classList.remove('viewer');
+      this.menu.show('main');
     });
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     this.level = new Level(levelData);
@@ -168,6 +188,17 @@ export class Game {
     this.warmUp();
 
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = this;
+  }
+
+  /** Shows a level's map from the title screen; loads it first if it isn't this one. */
+  private openViewer(id: string, data: LevelData | null): void {
+    const show = (d: LevelData) => {
+      this.menu.hide();
+      this.hud.root.classList.add('viewer');
+      this.viewer.open(d);
+    };
+    if (data) { show(data); return; }
+    loadLevel(id).then(show).catch((err: unknown) => this.hud.message(`CANNOT LOAD ${id}: ${String(err)}`, '#ff2a4d'));
   }
 
   /** Dev/test hook: advance the simulation with fixed controls. */
@@ -257,6 +288,13 @@ export class Game {
     const dt = Math.min((time - this.lastTime) / 1000, MAX_FRAME);
     this.lastTime = time;
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
+
+    if (this.viewer.active) {
+      this.ctx.renderer.info.reset();
+      this.viewer.render(this.ctx, this.camera.aspect, dt);
+      requestAnimationFrame(this.frame);
+      return;
+    }
 
     const locked = this.input.locked;
     if (locked && this.input.consumePress('automap') && !this.objective.over) this.toggleMap();

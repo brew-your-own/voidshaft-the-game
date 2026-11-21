@@ -56,7 +56,7 @@ export class HUD {
   private readonly energyValue: HTMLElement;
   private readonly missileValue: HTMLElement;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(readonly root: HTMLElement) {
     root.innerHTML = `
       <div class="crosshair"></div>
       <div class="missile-warning">⚠ MISSILE</div>

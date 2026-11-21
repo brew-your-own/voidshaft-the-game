@@ -1,4 +1,5 @@
 import { SIDE_VERTS, OPPOSITE, partnerVertex } from './geometry';
+import { parseLevelIndex, type LevelSummary } from './levelIndex';
 import { ROBOT_TYPES, type LevelData } from './types';
 
 /** Fetches a level exported by `npm run levels` and validates it. */
@@ -9,6 +10,16 @@ export async function loadLevel(id: string): Promise<LevelData> {
   const errors = validateLevel(data);
   if (errors.length) throw new Error(`Invalid level ${id}:\n${errors.join('\n')}`);
   return data;
+}
+
+/** Fetches the level list; an empty list if it is missing or malformed. */
+export async function loadLevelIndex(): Promise<LevelSummary[]> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}levels/index.json`);
+    return res.ok ? parseLevelIndex(await res.json()) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Structural checks: indices in range, portals symmetric and sharing their face. */

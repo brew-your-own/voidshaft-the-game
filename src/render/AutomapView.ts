@@ -1,18 +1,20 @@
 import {
-  BufferGeometry, Color, ConeGeometry, Float32BufferAttribute, Fog, Group, IcosahedronGeometry, LineBasicMaterial,
+  BoxGeometry, BufferGeometry, Color, ConeGeometry, Float32BufferAttribute, Fog, Group, IcosahedronGeometry, LineBasicMaterial,
   LineSegments, Mesh, MeshBasicMaterial, OctahedronGeometry, PerspectiveCamera, Quaternion, Scene, Vector3,
 } from 'three';
 import { buildDoorLines, buildWallLines, seenBounds, type MapLines } from '../level/automap';
 import type { DoorState, Level } from '../level/Level';
-import type { KeyColor } from '../level/types';
+import type { KeyColor, RobotType } from '../level/types';
 import { KEY_PALETTE, PALETTE } from './palette';
 import type { RenderContext } from './Renderer';
 
 export const AUTOMAP_TUNING = {
   /** Radians per pixel of mouse movement. */
   rotateSpeed: 0.004,
+  /** Fraction of the viewing distance moved per pixel when panning. */
+  panSpeed: 0.0015,
   minDistance: 6,
-  maxDistance: 160,
+  maxDistance: 400,
   /** Zoom per wheel pixel (exponential). */
   wheelZoom: 0.0015,
   /** Zoom per second while a forward/back key is held. */
@@ -26,7 +28,16 @@ export interface AutomapState {
   shipQuaternion: Quaternion;
   reactor: { position: Vector3; segment: number; alive: boolean } | null;
   keys: { color: KeyColor; position: Vector3; segment: number; collected: boolean }[];
+  /** Robots to mark (the map viewer only; the in-game map hides them). */
+  robots?: { type: RobotType; position: Vector3 }[];
 }
+
+/** Marker shape and colour per robot type. */
+const ROBOT_MARKERS: Record<RobotType, { color: number; geometry: () => BufferGeometry }> = {
+  stinger: { color: PALETTE.magenta, geometry: () => new ConeGeometry(0.55, 1.3, 3).rotateX(-Math.PI / 2) },
+  bulwark: { color: PALETTE.amber, geometry: () => new BoxGeometry(1.3, 1.3, 1.3) },
+  fuse: { color: PALETTE.red, geometry: () => new OctahedronGeometry(0.7) },
+};
 
 const X = new Vector3(1, 0, 0);
 const Y = new Vector3(0, 1, 0);
@@ -46,6 +57,8 @@ export class AutomapView {
   private readonly ship = new Group();
   private readonly reactor: Mesh;
   private readonly keyMarkers = new Map<KeyColor, Mesh>();
+  private readonly robotMarkers: Mesh[] = [];
+  private readonly robotLook = new Map<RobotType, { geometry: BufferGeometry; material: MeshBasicMaterial }>();
   private readonly orbit = new Quaternion();
   private readonly target = new Vector3();
   private distance = 30;
@@ -90,12 +103,28 @@ export class AutomapView {
     this.dirty = true;
   }
 
+  /** Frames a whole level from above and in front of its centre (map viewer). */
+  overview(): void {
+    const { center, radius } = seenBounds(this.level, this.level.segments.map(() => true));
+    this.target.copy(center);
+    this.orbit.setFromAxisAngle(Y, Math.PI / 5).multiply(_q.setFromAxisAngle(X, -0.7));
+    this.distance = clamp(radius * 1.7, 20, AUTOMAP_TUNING.maxDistance);
+    this.dirty = true;
+  }
+
   /** Turns the view around the ship (mouse), in camera-relative axes. */
   rotate(dx: number, dy: number): void {
     const k = AUTOMAP_TUNING.rotateSpeed;
     this.orbit.multiply(_q.setFromAxisAngle(Y, -dx * k));
     this.orbit.multiply(_q.setFromAxisAngle(X, -dy * k));
     this.orbit.normalize();
+  }
+
+  /** Slides the view sideways/up (pixels of mouse movement), scaled by distance. */
+  pan(dx: number, dy: number): void {
+    const k = AUTOMAP_TUNING.panSpeed * this.distance;
+    this.target.addScaledVector(_v.set(1, 0, 0).applyQuaternion(this.orbit), -dx * k);
+    this.target.addScaledVector(_v.set(0, 1, 0).applyQuaternion(this.orbit), dy * k);
   }
 
   /** Multiplies the viewing distance (>1 zooms out). */
@@ -114,7 +143,9 @@ export class AutomapView {
     this.ship.position.copy(state.shipPosition);
     this.ship.quaternion.copy(state.shipQuaternion);
     const pulse = 0.9 + 0.1 * Math.sin(this.time * 5);
-    this.ship.scale.setScalar(pulse);
+    // Markers grow when zoomed out, so they stay visible on a whole-level view.
+    const zoomScale = this.markerScale;
+    this.ship.scale.setScalar(pulse * zoomScale);
 
     const r = state.reactor;
     this.reactor.visible = !!r && r.alive && state.seen[r.segment];
@@ -122,12 +153,14 @@ export class AutomapView {
       this.reactor.position.copy(r.position);
       this.reactor.rotation.set(this.time * 0.4, this.time * 0.7, 0);
     }
+    this.syncRobots(state);
     for (const marker of this.keyMarkers.values()) marker.visible = false;
     for (const k of state.keys) {
       const m = this.keyMarkers.get(k.color)!;
       m.visible = !k.collected && state.seen[k.segment];
       m.position.copy(k.position);
       m.rotation.y = this.time * 1.5;
+      m.scale.setScalar(zoomScale);
     }
 
     this.camera.quaternion.copy(this.orbit);
@@ -135,6 +168,35 @@ export class AutomapView {
     const fog = this.scene.fog as Fog;
     fog.near = this.distance * 0.6;
     fog.far = this.distance * 3 + 40;
+  }
+
+  private get markerScale(): number {
+    return clamp(this.distance / 35, 1, 3);
+  }
+
+  private syncRobots(state: AutomapState): void {
+    const robots = state.robots ?? [];
+    robots.forEach((r, i) => {
+      let look = this.robotLook.get(r.type);
+      if (!look) {
+        const m = ROBOT_MARKERS[r.type];
+        look = { geometry: m.geometry(), material: new MeshBasicMaterial({ color: new Color(m.color).multiplyScalar(1.6), wireframe: true, toneMapped: false }) };
+        this.robotLook.set(r.type, look);
+      }
+      let marker = this.robotMarkers[i];
+      if (!marker) {
+        marker = new Mesh(look.geometry, look.material);
+        this.robotMarkers.push(marker);
+        this.scene.add(marker);
+      }
+      marker.geometry = look.geometry;
+      marker.material = look.material;
+      marker.visible = true;
+      marker.position.copy(r.position);
+      marker.rotation.y = this.time * 1.2;
+      marker.scale.setScalar(this.markerScale);
+    });
+    for (let i = robots.length; i < this.robotMarkers.length; i++) this.robotMarkers[i].visible = false;
   }
 
   /** Draws the map through the game's composer, then restores the game scene. */

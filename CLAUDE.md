@@ -4,7 +4,7 @@ An original browser-based 6DOF tunnel shooter inspired by Descent (1995), built 
 
 ## Where we are
 
-Milestones 1–8 (the vertical slice) and 11 (enemy ship designs) are done; 9 (level selector and map viewer) is next, then 10 (five bigger levels). Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
+Milestones 1–9 and 11 are done; 10 (five bigger levels) is next. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
 
 ## Commands
 
@@ -16,14 +16,14 @@ npm run levels     # export src/level/levels/*.ts → public/levels/*.json
 npm run build      # levels + typecheck + vite build
 ```
 
-After editing a level source, run `npm run levels`: the game loads the exported JSON, not the TS source.
+After editing a level source, run `npm run levels`: the game loads the exported JSON, not the TS source. New levels go in `LEVEL_SOURCES` (`src/level/levels/index.ts`); its order is the order on the title screen. Check a level's layout with its MAP button.
 
 ## Layout
 
 | Path | What lives there |
 |---|---|
 | `src/game/` | `Game` (main loop with a fixed 120 Hz step, wiring), `Player`, `Objective` (mission state machine), `Settings` (stored settings, key bindings) |
-| `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, mesh builder, automap lines and seen-segment memory, level sources |
+| `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, level index (`levelIndex`: summaries, which level to load), mesh builder, automap lines and seen-segment memory, level sources |
 | `src/physics/` | `Ship` (6DOF body), `Collision` (sphere against wall triangles, with sliding) |
 | `src/combat/` | `ProjectileSystem` (swept hits, homing, `explode` splash damage), player weapons, raycasts, the `Effects` interface |
 | `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, tuning, models in `RobotMeshes`, shape helpers and merging in `meshKit`, design `proposals`) |
@@ -31,7 +31,7 @@ After editing a level source, run `npm run levels`: the game loads the exported 
 | `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio |
 | `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
 | `src/shipyard/`, `shipyard.html` | Dev-only turntable page for robot models and proposals |
-| `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (main, pause, settings, controls) |
+| `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (title screen with the level list, pause, settings, controls), `MapViewer` (whole-level map from the title screen) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
 | `tools/buildLevels.ts` | Level JSON exporter |

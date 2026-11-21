@@ -137,3 +137,31 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
   .menu .panel { padding: 20px 16px; min-width: 0; }
   .menu .row { grid-template-columns: 1fr 110px 48px; }
 }
+
+/* ---- Level picker (title screen) ---- */
+.menu .levels { display: flex; flex-direction: column; gap: 8px; margin: 0 auto 6px; width: min(460px, 100%); text-align: left; }
+.menu .level {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border: 1px solid rgba(0, 229, 255, 0.25); background: rgba(0, 229, 255, 0.03);
+}
+.menu .level.current { border-color: var(--neon-2); box-shadow: 0 0 12px rgba(255, 43, 214, 0.25); }
+.menu .level .name { font-size: 13px; letter-spacing: 0.08em; color: #dfe8ff; text-shadow: none; }
+.menu .level .name small { display: block; margin-top: 3px; font-size: 10px; color: #7f8bbd; letter-spacing: 0.05em; }
+.menu .level button { min-width: 0; padding: 6px 14px; }
+
+/* ---- Map viewer ---- */
+#hud.viewer > :not(.map-viewer) { display: none !important; }
+.map-viewer { position: absolute; left: 16px; top: 16px; pointer-events: auto; max-width: calc(100% - 32px); }
+.map-viewer .panel {
+  background: rgba(4, 4, 14, 0.78); border: 1px solid rgba(0, 229, 255, 0.4); padding: 14px 18px; width: 300px; max-width: 100%;
+}
+.map-viewer h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: 0.2em; color: var(--neon-2); }
+.map-viewer .stats { margin: 0 0 10px; font-size: 11px; color: #b9c6ff; text-shadow: none; }
+.map-viewer ul { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 11px; }
+.map-viewer li { color: var(--c); text-shadow: 0 0 6px var(--c); text-transform: uppercase; letter-spacing: 0.1em; }
+.map-viewer .hint { margin: 0 0 10px; font-size: 10px; color: #7f8bbd; text-shadow: none; }
+.map-viewer button {
+  font: inherit; color: var(--neon); background: transparent; border: 1px solid var(--neon); padding: 6px 18px;
+  letter-spacing: 0.2em; cursor: pointer;
+}
+.map-viewer button:hover { background: rgba(0, 229, 255, 0.12); }

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "level01",
+    "name": "Level 01 — Test Mine",
+    "segments": 32,
+    "robots": 13,
+    "keys": 2,
+    "doors": 5
+  }
+]

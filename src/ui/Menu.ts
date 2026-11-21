@@ -1,4 +1,5 @@
 import { ACTION_LABELS, keyName, type Action, type Settings, type SettingsData } from '../game/Settings';
+import type { LevelSummary } from '../level/levelIndex';
 
 export type MenuScreen = 'main' | 'pause' | 'settings' | 'controls';
 
@@ -7,6 +8,16 @@ export interface MenuCallbacks {
   onPlay(): void;
   onRestart(): void;
   onClick(): void;
+  /** Switch to another level (reloads the page). */
+  onSelectLevel(id: string): void;
+  /** Show a level's map without playing it. */
+  onViewMap(id: string): void;
+}
+
+/** The level list on the title screen. */
+export interface MenuLevels {
+  list: LevelSummary[];
+  current: string;
 }
 
 interface Slider {
@@ -44,7 +55,12 @@ export class Menu {
   private parent: 'main' | 'pause' = 'main';
   private capturing: Action | null = null;
 
-  constructor(host: HTMLElement, private readonly settings: Settings, private readonly cb: MenuCallbacks) {
+  constructor(
+    host: HTMLElement,
+    private readonly settings: Settings,
+    private readonly cb: MenuCallbacks,
+    private readonly levels: MenuLevels,
+  ) {
     this.root = document.createElement('div');
     this.root.className = 'menu';
     host.appendChild(this.root);
@@ -84,8 +100,8 @@ export class Menu {
             <h1>VOIDSHAFT</h1>
             <p class="tag">six degrees of freedom · zero gravity · no way out</p>
             <p class="mission">Find the keys, destroy the reactor, then escape through the exit before the mine collapses.</p>
-            <nav>
-              <button data-act="play" class="primary">FLY</button>
+            <div class="levels">${this.levelRows()}</div>
+            <nav class="inline">
               <button data-go="settings">SETTINGS</button>
               <button data-go="controls">CONTROLS</button>
             </nav>
@@ -150,12 +166,34 @@ export class Menu {
     }
   }
 
+  /** One row per level: FLY for the loaded one, LOAD for the others, and MAP. */
+  private levelRows(): string {
+    const { list, current } = this.levels;
+    const rows = list.some((l) => l.id === current)
+      ? list
+      : [{ id: current, name: current, segments: 0, robots: 0, keys: 0, doors: 0 }, ...list];
+    return rows.map((l) => {
+      const here = l.id === current;
+      const stats = l.segments ? `${l.segments} segments · ${l.robots} robots` : '';
+      return `
+        <div class="level${here ? ' current' : ''}">
+          <span class="name">${escapeHtml(l.name)}<small>${stats}</small></span>
+          ${here
+            ? '<button data-act="play" class="primary">FLY</button>'
+            : `<button data-level="${escapeHtml(l.id)}">LOAD</button>`}
+          <button data-map="${escapeHtml(l.id)}">MAP</button>
+        </div>`;
+    }).join('');
+  }
+
   private onClickEvent(e: MouseEvent): void {
     const el = (e.target as HTMLElement).closest<HTMLElement>('button');
     if (!el) return;
     this.cb.onClick();
     if (el.dataset.go) { this.show(el.dataset.go as MenuScreen); return; }
     if (el.dataset.bind) { this.capturing = el.dataset.bind as Action; this.render(); return; }
+    if (el.dataset.level) { this.cb.onSelectLevel(el.dataset.level); return; }
+    if (el.dataset.map) { this.cb.onViewMap(el.dataset.map); return; }
     switch (el.dataset.act) {
       case 'play': this.cb.onPlay(); break;
       case 'restart': this.cb.onRestart(); break;
@@ -206,4 +244,8 @@ export class Menu {
       this.show(this.parent);
     }
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
