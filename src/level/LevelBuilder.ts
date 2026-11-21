@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { BOX_SIGNS, OPPOSITE, SIDE_VERTS, partnerVertex } from './geometry';
-import type { LevelData, LightData, SegmentData, Vec3 } from './types';
+import type { DoorData, KeyColor, KeyData, LevelData, LightData, SegmentData, Vec3 } from './types';
 
 export interface ExtrudeOptions {
   /** Distance the new face is pushed out along the side's outward normal. */
@@ -21,6 +21,8 @@ export class LevelBuilder {
   readonly vertices: Vector3[] = [];
   readonly segments: SegmentData[] = [];
   private readonly lights: LightData[] = [];
+  private readonly doors: DoorData[] = [];
+  private readonly keys: KeyData[] = [];
 
   addBox(center: Vec3, size: Vec3, color: number): number {
     const verts = BOX_SIGNS.map(([sx, sy, sz]) =>
@@ -72,6 +74,25 @@ export class LevelBuilder {
     });
   }
 
+  /** Places a door in an existing portal. */
+  door(seg: number, side: number, key: KeyColor | null = null): void {
+    if (this.segments[seg].children[side] < 0) {
+      throw new Error(`Segment ${seg} side ${side} is a wall, not a portal`);
+    }
+    const child = this.segments[seg].children[side];
+    const taken = this.doors.some((d) =>
+      (d.segment === seg && d.side === side) ||
+      (d.segment === child && d.side === OPPOSITE[side]));
+    if (taken) throw new Error(`Portal ${seg}:${side} already has a door`);
+    this.doors.push({ segment: seg, side, key });
+  }
+
+  /** Places a key pickup at the segment centre (plus offset). */
+  key(seg: number, color: KeyColor, offset: Vec3 = [0, 0, 0]): void {
+    const c = this.center(seg);
+    this.keys.push({ color, segment: seg, position: [c.x + offset[0], c.y + offset[1], c.z + offset[2]] });
+  }
+
   center(seg: number): Vector3 {
     return this.segments[seg].verts
       .reduce((acc, i) => acc.add(this.vertices[i]), new Vector3())
@@ -86,6 +107,8 @@ export class LevelBuilder {
       segments: this.segments.map((s) => ({ ...s, verts: [...s.verts], children: [...s.children] })),
       playerStart: { segment: startSeg, position: [c.x, c.y, c.z], forward },
       lights: [...this.lights],
+      doors: [...this.doors],
+      keys: [...this.keys],
     };
   }
 

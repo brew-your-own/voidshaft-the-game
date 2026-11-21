@@ -34,3 +34,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 .prompt ul { list-style: none; margin: 0; padding: 0; text-align: left; font-size: 13px; line-height: 1.8; color: #b9c6ff; text-shadow: none; }
 .prompt b { color: var(--neon); display: inline-block; min-width: 90px; }
 @keyframes blink { 50% { opacity: 0.35; } }
+.fatal { position: absolute; left: 16px; top: 16px; color: #ff2a4d; white-space: pre-wrap; }
+.keys { position: absolute; right: 16px; top: 14px; display: flex; gap: 8px; }
+.key {
+  width: 18px; height: 18px; transform: rotate(45deg); border: 1.5px solid var(--key);
+  opacity: 0.35; box-shadow: 0 0 6px var(--key);
+}
+.key.owned { opacity: 1; background: var(--key); box-shadow: 0 0 14px var(--key); }
+.message {
+  position: absolute; left: 50%; top: 30%; transform: translateX(-50%); opacity: 0;
+  font-size: 20px; letter-spacing: 0.3em; transition: opacity 0.4s; text-shadow: 0 0 10px currentColor;
+}

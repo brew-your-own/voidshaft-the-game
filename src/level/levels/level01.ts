@@ -5,7 +5,10 @@ import type { LevelData } from '../types';
 
 const { cyan, magenta, amber, lime, violet, red } = PALETTE;
 
-/** Flight-test level: corridors, a ramp, a turn, a vertical shaft and a hub. */
+/**
+ * Test mine. Route: hangar → crawlspace (red key) → corridor → duct →
+ * red door → shaft → hub → vault (gold key) → gold door → west wing.
+ */
 export function buildLevel01(): LevelData {
   const b = new LevelBuilder();
 
@@ -19,16 +22,18 @@ export function buildLevel01(): LevelData {
   b.addLight(s, magenta, 30, 25);
 
   // Right turn into an amber service duct that snakes a little.
-  let duct = b.extrude(s, SIDE.RIGHT, { length: 8, color: amber });
-  duct = b.tunnel(duct, SIDE.RIGHT, [
+  const ductStart = b.extrude(s, SIDE.RIGHT, { length: 8, color: amber });
+  b.door(s, SIDE.RIGHT);
+  const duct = b.tunnel(ductStart, SIDE.RIGHT, [
     { length: 8, shift: [0, 0, 3] },
     { length: 8, shift: [0, 0, -3] },
     { length: 6 },
   ]);
   b.addLight(duct, amber, 30, 25);
 
-  // Vertical shaft.
+  // Vertical shaft, behind a red door.
   let shaft = b.extrude(duct, SIDE.TOP, { length: 8, color: lime });
+  b.door(duct, SIDE.TOP, 'red');
   shaft = b.tunnel(shaft, SIDE.TOP, [{ length: 10, scale: 1.1 }, { length: 10 }]);
   b.addLight(shaft, lime, 30, 25);
 
@@ -40,26 +45,28 @@ export function buildLevel01(): LevelData {
   b.addLight(cap, cyan, 20, 15);
 
   // Branches out of the hub.
-  const west = b.tunnel(hub, SIDE.LEFT, [
-    { length: 6, scale: 0.4, color: red },
-    { length: 10, shift: [0, -3, 0] },
-    { length: 10 },
-  ]);
+  // Doors go on the narrow necks, not on the room walls.
+  const westNeck = b.extrude(hub, SIDE.LEFT, { length: 6, scale: 0.4, color: red });
+  const west = b.tunnel(westNeck, SIDE.LEFT, [{ length: 10, shift: [0, -3, 0] }, { length: 10 }]);
+  b.door(westNeck, SIDE.LEFT, 'gold');
   b.addLight(west, red, 30, 25);
-  b.tunnel(hub, SIDE.BACK, [
+  const vault = b.tunnel(hub, SIDE.BACK, [
     { length: 6, scale: 0.35, color: cyan },
     { length: 12, scale: 0.8 },
     { length: 8, shift: [4, 0, 0] },
   ]);
+  b.key(vault, 'gold');
 
   // Side tunnel from the hangar: low, twisting crawlspace.
-  const crawl = b.tunnel(hangar, SIDE.LEFT, [
-    { length: 6, scale: 0.5, color: amber },
+  const crawlNeck = b.extrude(hangar, SIDE.LEFT, { length: 6, scale: 0.5, color: amber });
+  const crawl = b.tunnel(crawlNeck, SIDE.LEFT, [
     { length: 8, shift: [0, 0, 4] },
     { length: 8, shift: [0, -2, -4] },
     { length: 8, scale: 1.4 },
   ]);
+  b.door(crawlNeck, SIDE.LEFT);
   b.addLight(crawl, amber, 25, 20);
+  b.key(crawl, 'red');
 
   // Small alcove behind the start.
   b.extrude(hangar, SIDE.BACK, { length: 5, scale: 0.7, color: violet });

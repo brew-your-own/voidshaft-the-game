@@ -1,4 +1,5 @@
-import { BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, Vector3 } from 'three';
+import { Color, Group, Mesh, Vector3 } from 'three';
+import { GeometrySink, mulberry32 } from '../render/GeometrySink';
 import { createLedMaterial, createWallMaterial } from '../render/Materials';
 import { PALETTE } from '../render/palette';
 import { bilerp } from './geometry';
@@ -11,75 +12,37 @@ const LED_WIDTH = 0.1;
 const LED_GLOW = 2.0;
 const DOT_CHANCE = 0.1;
 
-class GeometrySink {
-  readonly pos: number[] = [];
-  readonly nrm: number[] = [];
-  readonly col: number[] = [];
-  private readonly ab = new Vector3();
-  private readonly ac = new Vector3();
-  private readonly n = new Vector3();
-
-  /** Adds a triangle wound to face `inside`. */
-  tri(a: Vector3, b: Vector3, c: Vector3, color: Color, inside: Vector3): void {
-    this.n.crossVectors(this.ab.subVectors(b, a), this.ac.subVectors(c, a));
-    if (this.n.dot(this.ab.subVectors(inside, a)) < 0) {
-      [b, c] = [c, b];
-      this.n.negate();
-    }
-    this.n.normalize();
-    for (const v of [a, b, c]) {
-      this.pos.push(v.x, v.y, v.z);
-      this.nrm.push(this.n.x, this.n.y, this.n.z);
-      this.col.push(color.r, color.g, color.b);
-    }
-  }
-
-  quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, inside: Vector3): void {
-    this.tri(a, b, c, color, inside);
-    this.tri(a, c, d, color, inside);
-  }
-
-  toGeometry(withNormals: boolean): BufferGeometry {
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(this.pos, 3));
-    if (withNormals) g.setAttribute('normal', new Float32BufferAttribute(this.nrm, 3));
-    g.setAttribute('color', new Float32BufferAttribute(this.col, 3));
-    g.computeBoundingSphere();
-    return g;
-  }
-}
-
-/** Deterministic PRNG so the level looks the same every load. */
-function mulberry32(seed: number): () => number {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+export interface LevelMeshes {
+  root: Group;
+  /** One group per segment (walls + LEDs), toggled by portal culling. */
+  segments: Group[];
 }
 
 /** Builds the render meshes for all walls: bevelled panels plus LED strips. */
-export function buildLevelMesh(level: Level): Group {
-  const walls = new GeometrySink();
-  const leds = new GeometrySink();
+export function buildLevelMesh(level: Level): LevelMeshes {
   const rng = mulberry32(1337);
   const base = new Color(PALETTE.wall);
   const white = new Color(PALETTE.white);
+  const wallMaterial = createWallMaterial();
+  const ledMaterial = createLedMaterial();
+  const root = new Group();
+  root.name = 'level';
 
-  for (const seg of level.segments) {
+  const segments = level.segments.map((seg) => {
+    const walls = new GeometrySink();
+    const leds = new GeometrySink();
     const accent = new Color(seg.color);
-    seg.sides.forEach((side) => {
+    for (const side of seg.sides) {
       if (side.isWall) buildWall(seg, side.quad, walls, leds, rng, base, accent, white);
-    });
-  }
-
-  const group = new Group();
-  group.name = 'level';
-  group.add(new Mesh(walls.toGeometry(true), createWallMaterial()));
-  group.add(new Mesh(leds.toGeometry(false), createLedMaterial()));
-  return group;
+    }
+    const group = new Group();
+    group.name = `segment-${seg.index}`;
+    if (walls.pos.length) group.add(new Mesh(walls.toGeometry(true), wallMaterial));
+    if (leds.pos.length) group.add(new Mesh(leds.toGeometry(false), ledMaterial));
+    root.add(group);
+    return group;
+  });
+  return { root, segments };
 }
 
 function buildWall(

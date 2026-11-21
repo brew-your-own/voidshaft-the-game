@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { SIDE_VERTS } from './geometry';
-import type { LevelData } from './types';
+import { OPPOSITE, SIDE_VERTS } from './geometry';
+import type { KeyColor, LevelData } from './types';
 
 /** A triangle with its plane; the normal points into the segment interior. */
 export interface Tri {
@@ -26,6 +26,25 @@ export interface Segment {
   sides: SideGeom[];
 }
 
+/** Runtime state of a door; rendering and logic live in entities/Door. */
+export interface DoorState {
+  index: number;
+  segment: number;
+  side: number;
+  child: number;
+  key: KeyColor | null;
+  /** Portal quad as seen from `segment`. */
+  quad: Vector3[];
+  center: Vector3;
+  /** Normal pointing into `segment`. */
+  normal: Vector3;
+  /** Blocking triangles, facing into both segments. */
+  tris: Tri[];
+  /** 0 = closed, 1 = fully open. */
+  openAmount: number;
+  solid: boolean;
+}
+
 const CONTAIN_EPS = 0.05;
 
 /** Runtime level: segment graph plus spatial queries. */
@@ -33,7 +52,10 @@ export class Level {
   readonly name: string;
   readonly vertices: Vector3[];
   readonly segments: Segment[];
+  readonly doors: DoorState[];
   private readonly nearWallsCache = new Map<number, Tri[]>();
+  private readonly nearDoorsCache = new Map<number, DoorState[]>();
+  private readonly doorByPortal = new Map<string, DoorState>();
 
   constructor(readonly data: LevelData) {
     this.name = data.name;
@@ -53,6 +75,39 @@ export class Level {
       });
       return { index, verts: s.verts, children: s.children, color: s.color, center, sides };
     });
+
+    this.doors = (data.doors ?? []).map((d, index): DoorState => {
+      const seg = this.segments[d.segment];
+      const child = seg.children[d.side];
+      const side = seg.sides[d.side];
+      const center = side.quad.reduce((acc, v) => acc.add(v), new Vector3()).multiplyScalar(0.25);
+      const normal = side.tris[0].n.clone().add(side.tris[1].n).normalize();
+      const door: DoorState = {
+        index, segment: d.segment, side: d.side, child, key: d.key,
+        quad: side.quad, center, normal,
+        tris: [...side.tris, ...this.segments[child].sides[OPPOSITE[d.side]].tris],
+        openAmount: 0, solid: true,
+      };
+      this.doorByPortal.set(`${d.segment}:${d.side}`, door);
+      this.doorByPortal.set(`${child}:${OPPOSITE[d.side]}`, door);
+      return door;
+    });
+  }
+
+  /** Door in the portal on `side` of `seg`, if any (works from both sides). */
+  doorAt(seg: number, side: number): DoorState | undefined {
+    return this.doorByPortal.get(`${seg}:${side}`);
+  }
+
+  /** Doors within two portal hops of a segment. */
+  nearDoors(seg: number): DoorState[] {
+    let doors = this.nearDoorsCache.get(seg);
+    if (!doors) {
+      const near = new Set(this.neighbourhood(seg, 2));
+      doors = this.doors.filter((d) => near.has(d.segment) || near.has(d.child));
+      this.nearDoorsCache.set(seg, doors);
+    }
+    return doors;
   }
 
   /** Smallest signed distance from p to the segment's side planes (>0 = inside). */

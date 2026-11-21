@@ -24,10 +24,29 @@ export interface LightData {
   distance: number;
 }
 
+export type KeyColor = 'red' | 'gold' | 'blue';
+export const KEY_COLORS: readonly KeyColor[] = ['red', 'gold', 'blue'];
+
+/** A door filling the portal between `segment` and its child on `side`. */
+export interface DoorData {
+  segment: number;
+  side: number;
+  /** Key needed to open it, or null for an unlocked door. */
+  key: KeyColor | null;
+}
+
+export interface KeyData {
+  color: KeyColor;
+  segment: number;
+  position: Vec3;
+}
+
 export interface LevelData {
   name: string;
   vertices: Vec3[];
   segments: SegmentData[];
   playerStart: { segment: number; position: Vec3; forward: Vec3 };
   lights: LightData[];
+  doors: DoorData[];
+  keys: KeyData[];
 }
