@@ -62,12 +62,14 @@ export class Door {
     const near = dist < DOOR_TUNING.triggerDistance;
     const overlapping = dist < radius + 0.35;
     const speed = dt / DOOR_TUNING.openTime;
+    // Exit doors have no key but stay sealed until the caller says otherwise.
+    const allowed = hasKey || (s.key === null && !s.exit);
     let event: DoorEvent = null;
 
     switch (this.phase) {
       case 'closed':
         if (near) {
-          if (s.key === null || hasKey) { this.phase = 'opening'; event = 'opened'; }
+          if (allowed) { this.phase = 'opening'; event = 'opened'; }
           else event = 'locked';
         }
         break;
@@ -82,7 +84,7 @@ export class Door {
         break;
       case 'closing':
         // Never close on the ship: re-open instead.
-        if (overlapping || blocked || (near && (s.key === null || hasKey))) { this.phase = 'opening'; break; }
+        if (overlapping || blocked || (near && allowed)) { this.phase = 'opening'; break; }
         s.openAmount = Math.max(0, s.openAmount - speed);
         if (s.openAmount <= 0) this.phase = 'closed';
         break;

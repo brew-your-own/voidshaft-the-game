@@ -18,6 +18,8 @@ export class Input {
   private mouseDX = 0;
   private mouseDY = 0;
   readonly buttons = new Set<number>();
+  /** When false, clicking no longer captures the mouse (end screen). */
+  lockEnabled = true;
 
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -32,7 +34,10 @@ export class Input {
       this.mouseDY += e.movementY;
     });
     target.addEventListener('mousedown', (e) => {
-      if (!this.locked) { void target.requestPointerLock(); return; }
+      if (!this.locked) {
+        if (this.lockEnabled) void target.requestPointerLock();
+        return;
+      }
       this.buttons.add(e.button);
     });
     window.addEventListener('mouseup', (e) => this.buttons.delete(e.button));

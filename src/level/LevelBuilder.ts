@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { BOX_SIGNS, OPPOSITE, SIDE_VERTS, partnerVertex } from './geometry';
 import type {
-  DoorData, KeyColor, KeyData, LevelData, LightData, PickupData, PickupKind, RobotData, RobotType, SegmentData, TargetData, Vec3,
+  DoorData, KeyColor, KeyData, LevelData, ReactorData, LightData, PickupData, PickupKind, RobotData, RobotType, SegmentData, TargetData, Vec3,
 } from './types';
 
 export interface ExtrudeOptions {
@@ -28,6 +28,7 @@ export class LevelBuilder {
   private readonly pickups: PickupData[] = [];
   private readonly targets: TargetData[] = [];
   private readonly robots: RobotData[] = [];
+  private reactorData: ReactorData | null = null;
 
   addBox(center: Vec3, size: Vec3, color: number): number {
     const verts = BOX_SIGNS.map(([sx, sy, sz]) =>
@@ -102,6 +103,24 @@ export class LevelBuilder {
     this.targets.push({ segment: seg, position: this.at(seg, offset) });
   }
 
+  /**
+   * Places the reactor at the segment centre (plus offset), with shield
+   * pylons at offsets from the reactor.
+   */
+  reactor(seg: number, offset: Vec3, pylonOffsets: Vec3[], countdown: number): void {
+    const p = this.at(seg, offset);
+    this.reactorData = {
+      segment: seg, position: p, countdown,
+      pylons: pylonOffsets.map((o) => ({ segment: seg, position: [p[0] + o[0], p[1] + o[1], p[2] + o[2]] as Vec3 })),
+    };
+  }
+
+  /** Marks the door on `side` of `seg` as the level exit (adds the door). */
+  exit(seg: number, side: number): void {
+    this.door(seg, side);
+    this.doors[this.doors.length - 1].exit = true;
+  }
+
   /** Places a robot at the segment centre (plus offset). */
   robot(seg: number, type: RobotType, offset: Vec3 = [0, 0, 0]): void {
     this.robots.push({ type, segment: seg, position: this.at(seg, offset) });
@@ -136,6 +155,7 @@ export class LevelBuilder {
       pickups: [...this.pickups],
       targets: [...this.targets],
       robots: [...this.robots],
+      reactor: this.reactorData,
     };
   }
 

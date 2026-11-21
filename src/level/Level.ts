@@ -33,6 +33,8 @@ export interface DoorState {
   side: number;
   child: number;
   key: KeyColor | null;
+  /** Level exit: sealed until the reactor is destroyed. */
+  exit: boolean;
   /** Portal quad as seen from `segment`. */
   quad: Vector3[];
   center: Vector3;
@@ -83,7 +85,7 @@ export class Level {
       const center = side.quad.reduce((acc, v) => acc.add(v), new Vector3()).multiplyScalar(0.25);
       const normal = side.tris[0].n.clone().add(side.tris[1].n).normalize();
       const door: DoorState = {
-        index, segment: d.segment, side: d.side, child, key: d.key,
+        index, segment: d.segment, side: d.side, child, key: d.key, exit: !!d.exit,
         quad: side.quad, center, normal,
         tris: [...side.tris, ...this.segments[child].sides[OPPOSITE[d.side]].tris],
         openAmount: 0, solid: true,

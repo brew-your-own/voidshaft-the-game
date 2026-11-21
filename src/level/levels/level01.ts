@@ -7,7 +7,8 @@ const { cyan, magenta, amber, lime, violet, red } = PALETTE;
 
 /**
  * Test mine. Route: hangar → crawlspace (red key) → corridor → duct →
- * red door → shaft → hub → vault (gold key) → gold door → west wing.
+ * red door → shaft → hub → vault (gold key) → gold door → west wing →
+ * reactor. Destroying the reactor unseals the exit above the hub.
  */
 export function buildLevel01(): LevelData {
   const b = new LevelBuilder();
@@ -57,6 +58,12 @@ export function buildLevel01(): LevelData {
   b.pickup(hub, 'shield', [0, -5, 0]);
   b.pickup(cap, 'missiles');
 
+  // Exit above the hub: sealed until the reactor blows.
+  const exitNeck = b.extrude(cap, SIDE.TOP, { length: 6, color: cyan });
+  b.exit(cap, SIDE.TOP);
+  const exitTunnel = b.tunnel(exitNeck, SIDE.TOP, [{ length: 10 }, { length: 10, scale: 1.3 }]);
+  b.addLight(exitTunnel, PALETTE.white, 60, 30);
+
   // Branches out of the hub.
   // Doors go on the narrow necks, not on the room walls.
   const westNeck = b.extrude(hub, SIDE.LEFT, { length: 6, scale: 0.4, color: red });
@@ -65,6 +72,18 @@ export function buildLevel01(): LevelData {
   b.addLight(west, red, 30, 25);
   b.robot(west, 'bulwark');
   b.robot(west, 'fuse', [3, 0, 0]);
+
+  // Reactor chamber at the end of the west wing.
+  const reactorFlare = b.extrude(west, SIDE.LEFT, { length: 4, scale: 2.2, color: red });
+  const chamber = b.extrude(reactorFlare, SIDE.LEFT, { length: 18 });
+  const reactorBack = b.extrude(chamber, SIDE.LEFT, { length: 4, scale: 0.5 });
+  b.addLight(chamber, red, 70, 40);
+  b.addLight(reactorBack, amber, 20, 15);
+  b.reactor(chamber, [0, 0, 0], [[5, 3.5, 0], [-5, -1.75, 3], [0, -2, -4]], 50);
+  b.robot(reactorFlare, 'stinger', [0, 3, 0]);
+  b.robot(reactorBack, 'stinger');
+  b.pickup(reactorFlare, 'shield', [0, -3, 0]);
+  b.pickup(reactorFlare, 'missiles', [0, -3, 2]);
   const vault = b.tunnel(hub, SIDE.BACK, [
     { length: 6, scale: 0.35, color: cyan },
     { length: 12, scale: 0.8 },

@@ -43,6 +43,12 @@ export function validateLevel(data: LevelData): string[] {
     ...(data.targets ?? []).map((t, i) => ({ what: `target ${i}`, segment: t.segment })),
     ...(data.robots ?? []).map((r, i) => ({ what: `robot ${i}`, segment: r.segment })),
   ];
+  if (data.reactor) {
+    for (const s of [data.reactor.segment, ...data.reactor.pylons.map((p) => p.segment)]) {
+      if (s < 0 || s >= nSeg) errors.push('reactor: segment out of range');
+    }
+    if (!data.doors.some((d) => d.exit)) errors.push('reactor without an exit door');
+  }
   for (const [i, r] of (data.robots ?? []).entries()) {
     if (!ROBOT_TYPES.includes(r.type)) errors.push(`robot ${i}: unknown type ${r.type}`);
   }

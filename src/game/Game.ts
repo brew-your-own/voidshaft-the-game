@@ -5,6 +5,7 @@ import { ProjectileSystem } from '../combat/Projectiles';
 import type { Damageable } from '../combat/types';
 import { Door } from '../entities/Door';
 import { Pickup } from '../entities/Pickup';
+import { Reactor, type ReactorEvent } from '../entities/Reactor';
 import { Robot, type RobotWorld } from '../entities/robots/Robot';
 import { Target } from '../entities/Target';
 import { GameEffects } from '../fx/GameEffects';
@@ -18,6 +19,7 @@ import { keyCss } from '../render/palette';
 import { PortalCuller } from '../render/PortalCuller';
 import { createRenderer, type RenderContext } from '../render/Renderer';
 import { HUD } from '../ui/HUD';
+import { Objective } from './Objective';
 import { Player } from './Player';
 
 const SIM_HZ = 120;
@@ -26,6 +28,8 @@ const MAX_FRAME = 0.1;
 /** Converts authored light intensities to scene units. */
 const LIGHT_SCALE = 0.15;
 const RESPAWN_DELAY = 2.5;
+/** Delay before the end screen, so the final explosion can play. */
+const END_DELAY = 2.2;
 
 const IDLE_CONTROLS: FlightControls = {
   forward: 0, strafe: 0, lift: 0, roll: 0, pitch: 0, yaw: 0,
@@ -46,6 +50,11 @@ export class Game {
   private readonly pickups: Pickup[];
   private readonly targets: Target[];
   private readonly robots: Robot[] = [];
+  private readonly reactor: Reactor | null = null;
+  private readonly objective: Objective;
+  private readonly alarmLight = new HemisphereLight(0xff1030, 0x200008, 0);
+  private endTimer = -1;
+  private shake = 0;
   private readonly culler: PortalCuller;
   private readonly effects = new GameEffects();
   private readonly projectiles: ProjectileSystem;
@@ -102,6 +111,14 @@ export class Game {
     for (const r of levelData.robots ?? []) this.robots.push(new Robot(r.type, r, world));
     for (const r of this.robots) this.scene.add(r.object);
     this.damageables.push(this.player, ...this.targets, ...this.robots);
+    if (levelData.reactor) {
+      this.reactor = new Reactor(levelData.reactor, this.level, this.projectiles, this.effects, this.player);
+      this.segmentMeshes[this.reactor.segment].add(this.reactor.object);
+      for (const p of this.reactor.pylons) this.segmentMeshes[p.segment].add(p.object);
+      this.damageables.push(...this.reactor.damageables);
+    }
+    this.objective = new Objective(levelData.reactor?.countdown ?? 0);
+    this.scene.add(this.alarmLight);
     this.weapons = new PlayerWeapons(this.player, this.level, this.projectiles, this.effects);
     this.scene.add(this.effects.object, this.projectileRenderer.object);
 
@@ -141,6 +158,14 @@ export class Game {
     return this.robots;
   }
 
+  get debugReactor(): Reactor | null {
+    return this.reactor;
+  }
+
+  get debugObjective(): Objective {
+    return this.objective;
+  }
+
   start(): void {
     requestAnimationFrame((t) => {
       this.lastTime = t;
@@ -154,7 +179,7 @@ export class Game {
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
 
     const locked = this.input.locked;
-    if (locked) {
+    if (locked && this.endTimer < END_DELAY) {
       const { dx, dy } = this.input.consumeMouse();
       if (this.player.alive) this.ship.applyMouse(dx, dy);
       this.accumulator += dt;
@@ -184,19 +209,24 @@ export class Game {
       missiles: this.player.missiles,
       dead: !this.player.alive,
       hostiles: this.robots.reduce((n, r) => n + (r.alive ? 1 : 0), 0),
+      ships: this.objective.ships,
+      countdown: this.objective.state === 'escape' ? this.objective.timeLeft : null,
     });
     requestAnimationFrame(this.frame);
   };
 
   /** Fixed-rate simulation: movement, weapons, projectiles. */
   private simulate(dt: number, controls: FlightControls): void {
-    if (this.player.alive) {
+    if (this.player.alive && !this.objective.over) {
       this.ship.step(dt, controls);
       const event = this.weapons.update(dt, controls.firePrimary, controls.fireSecondary);
       if (event === 'no-energy') this.notify('ENERGY DEPLETED', '#ffa31a');
       if (event === 'no-missiles') this.notify('NO MISSILES', '#ff2bd6');
     }
+    // Once out of the mine, the fight is over.
+    if (this.objective.state === 'won') return;
     for (const r of this.robots) r.update(dt);
+    this.reactor?.update(dt);
     this.projectiles.update(dt);
   }
 
@@ -215,8 +245,14 @@ export class Game {
     for (const door of this.doors) {
       const key = door.key;
       const blocked = this.robots.some((b) => b.alive && distanceToTris(b.position, door.state.tris) < b.radius + 0.35);
-      const event = door.update(dt, pos, r, key === null || this.player.keys.has(key), blocked);
-      if (event === 'locked' && key) this.notify(`${key.toUpperCase()} KEY REQUIRED`, keyCss(key));
+      const unlocked = door.state.exit
+        ? this.objective.state === 'escape'
+        : key === null || this.player.keys.has(key);
+      const event = door.update(dt, pos, r, unlocked, blocked);
+      if (event === 'locked' && door.state.exit) this.notify('EXIT SEALED — DESTROY THE REACTOR', '#ff2a4d');
+      else if (event === 'locked' && key) this.notify(`${key.toUpperCase()} KEY REQUIRED`, keyCss(key));
+      if (event === 'opened' && door.state.exit) this.hud.message('EXIT OPEN — GO!', '#00e5ff');
+      if (door.state.exit && this.ship.segment === door.state.child && this.player.alive) this.objective.reachedExit();
     }
     for (const p of this.pickups) {
       if (!this.player.alive || !p.update(dt, pos, r)) continue;
@@ -230,8 +266,83 @@ export class Game {
       }
     }
     for (const t of this.targets) t.update(dt);
+    if (this.reactor) {
+      for (const e of this.reactor.events.splice(0)) this.onReactorEvent(e);
+    }
     this.effects.update(dt);
+    this.updateMission(dt);
     this.handleDeath(dt);
+  }
+
+  private onReactorEvent(e: ReactorEvent): void {
+    switch (e) {
+      case 'shield-hit': this.notify('REACTOR SHIELDED — DESTROY THE EMITTERS', '#00e5ff'); break;
+      case 'pylon-destroyed': {
+        const left = this.reactor!.pylons.filter((p) => p.alive).length;
+        if (left > 0) this.hud.message(`EMITTER DOWN — ${left} LEFT`, '#00e5ff');
+        break;
+      }
+      case 'shield-down': this.hud.message('REACTOR SHIELD DOWN', '#ffa31a'); break;
+      case 'core-critical': this.hud.message('REACTOR CRITICAL', '#ff2a4d'); this.shake = 1.5; break;
+      case 'destroyed':
+        this.objective.reactorDestroyed();
+        this.objective.kills++;
+        this.shake = 2;
+        this.hud.message('REACTOR DESTROYED — ESCAPE!', '#ff2a4d');
+        break;
+    }
+  }
+
+  /** Countdown, alarm, loss by collapse and the end screen. */
+  private updateMission(dt: number): void {
+    const o = this.objective;
+    const wasEscaping = o.state === 'escape';
+    o.update(dt);
+    if (wasEscaping && o.state === 'lost' && this.player.alive) {
+      // The mine collapses around the ship.
+      this.player.shield = 0;
+      this.player.alive = false;
+      this.effects.explosion(this.ship.position, 3, 0xffa31a);
+      this.shake = 3;
+    }
+    if (o.state === 'escape') {
+      const urgency = 1 - o.timeLeft / Math.max(1, o.countdown);
+      this.alarmLight.intensity = (0.25 + 0.35 * urgency) * (0.5 + 0.5 * Math.sin(o.elapsed * 6));
+      this.shake = Math.max(this.shake, 0.15 + 0.35 * urgency);
+    } else {
+      this.alarmLight.intensity = 0;
+    }
+    this.shake = Math.max(0, this.shake - dt * 1.5);
+
+    if (!o.over) return;
+    if (this.endTimer < 0) this.endTimer = 0;
+    const before = this.endTimer;
+    this.endTimer += dt;
+    if (before < END_DELAY && this.endTimer >= END_DELAY) this.showEndScreen();
+  }
+
+  private showEndScreen(): void {
+    const o = this.objective;
+    const time = `${Math.floor(o.elapsed / 60)}:${String(Math.floor(o.elapsed % 60)).padStart(2, '0')}`;
+    const subtitles = {
+      'out-of-ships': 'All ships lost.',
+      collapse: 'The mine collapsed before you got out.',
+      caught: 'Your ship was destroyed during the escape.',
+    };
+    this.hud.showEnd({
+      won: o.state === 'won',
+      title: o.state === 'won' ? 'MINE CLEARED' : 'MISSION FAILED',
+      subtitle: o.state === 'won'
+        ? `Escaped with ${o.timeLeft.toFixed(1)} s to spare.`
+        : subtitles[o.lossReason ?? 'out-of-ships'],
+      stats: [
+        ['TIME', time],
+        ['KILLS', String(o.kills)],
+        ['SHIPS LOST', String(o.deaths)],
+      ],
+    }, () => window.location.reload());
+    this.input.lockEnabled = false;
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
   private handleDeath(dt: number): void {
@@ -240,11 +351,14 @@ export class Game {
       return;
     }
     if (this.respawnTimer === 0) {
-      this.effects.explosion(this.ship.position, 2, 0xff5533);
+      const collapsed = this.objective.over;
+      if (!collapsed) this.effects.explosion(this.ship.position, 2, 0xff5533);
       this.hud.message('SHIP DESTROYED', '#ff2a4d');
       this.ship.velocity.set(0, 0, 0);
+      if (!collapsed) this.objective.playerDied();
     }
     this.respawnTimer += dt;
+    if (this.objective.over) return;
     if (this.respawnTimer >= RESPAWN_DELAY) {
       this.player.respawn();
       this.respawnTimer = 0;
@@ -255,6 +369,7 @@ export class Game {
   /** Removes a destroyed robot and maybe leaves a powerup behind. */
   private onRobotDeath(robot: Robot): void {
     robot.object.removeFromParent();
+    this.objective.kills++;
     const drop = robot.tuning.drop;
     if (drop && Math.random() < drop.chance) this.spawnPickup(drop.kind, robot.position, robot.segment);
   }
@@ -288,5 +403,11 @@ export class Game {
   private syncCamera(alpha: number): void {
     this.camera.position.lerpVectors(this.ship.prevPosition, this.ship.position, alpha);
     this.camera.quaternion.copy(this.ship.quaternion);
+    if (this.shake > 0) {
+      const a = this.shake * 0.06;
+      this.camera.position.x += (Math.random() - 0.5) * a;
+      this.camera.position.y += (Math.random() - 0.5) * a;
+      this.camera.position.z += (Math.random() - 0.5) * a;
+    }
   }
 }

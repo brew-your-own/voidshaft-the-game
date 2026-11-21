@@ -33,6 +33,8 @@ export interface DoorData {
   side: number;
   /** Key needed to open it, or null for an unlocked door. */
   key: KeyColor | null;
+  /** Exit door: sealed until the reactor is destroyed; flying through wins. */
+  exit?: boolean;
 }
 
 export interface KeyData {
@@ -65,6 +67,16 @@ export interface RobotData {
   position: Vec3;
 }
 
+/** The level's boss: a shielded core powered by emitter pylons. */
+export interface ReactorData {
+  segment: number;
+  position: Vec3;
+  /** Shield emitters; the core is invulnerable while any survive. */
+  pylons: { segment: number; position: Vec3 }[];
+  /** Seconds to reach the exit once the reactor blows. */
+  countdown: number;
+}
+
 export interface LevelData {
   name: string;
   vertices: Vec3[];
@@ -76,4 +88,5 @@ export interface LevelData {
   pickups: PickupData[];
   targets: TargetData[];
   robots: RobotData[];
+  reactor: ReactorData | null;
 }

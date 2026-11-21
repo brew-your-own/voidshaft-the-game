@@ -14,7 +14,20 @@ export interface HudState {
   missiles: number;
   dead: boolean;
   hostiles: number;
+  ships: number;
+  /** Seconds left in the escape countdown, or null when not escaping. */
+  countdown: number | null;
 }
+
+export interface EndScreen {
+  won: boolean;
+  title: string;
+  subtitle: string;
+  stats: [string, string][];
+}
+
+/** Ignore input this long after the end screen appears. */
+const END_ARM_DELAY_MS = 600;
 
 const KEY_SLOTS = (['blue', 'gold', 'red'] as const).map((color) => ({ color, css: keyCss(color) }));
 
@@ -39,12 +52,16 @@ export class HUD {
       <div class="impact"></div>
       <div class="keys">${KEY_SLOTS.map((k) => `<span class="key" style="--key:${k.css}"></span>`).join('')}</div>
       <div class="message"></div>
+      <div class="countdown"></div>
+      <div class="alarm"></div>
+      <div class="ships"></div>
       <div class="gauge shield"><label>SHIELD</label><div class="bar"><i></i></div><span></span></div>
       <div class="gauge energy"><label>ENERGY</label><div class="bar"><i></i></div><span></span></div>
       <div class="weapons"><div>LASER</div><div class="missiles">MISSILE <span></span></div></div>
       <div class="prompt">
         <h1>VOIDSHAFT</h1>
         <p>Click to fly</p>
+        <div class="mission">Find the keys, destroy the reactor, then escape through the exit before the mine collapses.</div>
         <ul>
           <li><b>Mouse</b> pitch / yaw</li>
           <li><b>LMB</b> laser &nbsp; <b>RMB / X</b> homing missile</li>
@@ -56,7 +73,8 @@ export class HUD {
           <li><b>Shift</b> boost &nbsp; <b>Arrows</b> keyboard look</li>
           <li><b>Esc</b> release mouse</li>
         </ul>
-      </div>`;
+      </div>
+      <div class="end"><h1></h1><h2></h2><dl></dl><p>Click or press Enter to play again</p></div>`;
     this.telemetry = root.querySelector('.telemetry')!;
     this.prompt = root.querySelector('.prompt')!;
     this.impact = root.querySelector('.impact')!;
@@ -67,6 +85,37 @@ export class HUD {
     this.energyBar = root.querySelector('.energy i')!;
     this.energyValue = root.querySelector('.energy span')!;
     this.missileValue = root.querySelector('.missiles span')!;
+    this.countdownEl = root.querySelector('.countdown')!;
+    this.alarmEl = root.querySelector('.alarm')!;
+    this.shipsEl = root.querySelector('.ships')!;
+    this.endEl = root.querySelector('.end')!;
+  }
+
+  private readonly countdownEl: HTMLElement;
+  private readonly alarmEl: HTMLElement;
+  private readonly shipsEl: HTMLElement;
+  private readonly endEl: HTMLElement;
+
+  /**
+   * Shows the win/lose screen. After a short delay (so a held fire button
+   * doesn't skip it), any click or Enter/Space runs `onRestart`. Listening
+   * on the window works whether or not the mouse is still captured and
+   * wherever the cursor reappears.
+   */
+  showEnd(end: EndScreen, onRestart: () => void): void {
+    const el = this.endEl;
+    el.classList.toggle('won', end.won);
+    el.querySelector('h1')!.textContent = end.title;
+    el.querySelector('h2')!.textContent = end.subtitle;
+    el.querySelector('dl')!.innerHTML = end.stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    el.classList.add('visible');
+    let done = false;
+    const restart = () => { if (!done) { done = true; onRestart(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.code === 'Enter' || e.code === 'Space') restart(); };
+    window.setTimeout(() => {
+      window.addEventListener('mousedown', restart);
+      window.addEventListener('keydown', onKey);
+    }, END_ARM_DELAY_MS);
   }
 
   /** Shows a centred message for a couple of seconds. */
@@ -79,7 +128,17 @@ export class HUD {
   }
 
   update(s: HudState): void {
-    this.prompt.style.display = s.locked ? 'none' : '';
+    const ended = this.endEl.classList.contains('visible');
+    this.prompt.style.display = s.locked || ended ? 'none' : '';
+    this.shipsEl.textContent = `SHIPS ${'▲'.repeat(Math.max(0, s.ships))}`;
+    const escaping = s.countdown !== null && !ended;
+    this.countdownEl.style.display = escaping ? '' : 'none';
+    this.alarmEl.style.display = escaping ? '' : 'none';
+    if (escaping) {
+      const t = s.countdown!;
+      this.countdownEl.textContent = `ESCAPE  ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+      this.countdownEl.classList.toggle('critical', t < 10);
+    }
     this.shieldBar.style.width = `${s.shield}%`;
     this.shieldValue.textContent = String(Math.ceil(s.shield));
     this.shieldBar.parentElement!.parentElement!.classList.toggle('low', s.shield < 25);

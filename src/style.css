@@ -56,3 +56,30 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 .gauge.low { animation: blink 0.5s steps(2) infinite; }
 .gauge.shield.low { color: #ff2a4d; }
 .weapons { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: 0.2em; color: #ff2bd6; line-height: 1.6; }
+
+.countdown {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  color: #ff2a4d; font-size: 26px; letter-spacing: 0.25em; text-shadow: 0 0 12px currentColor;
+}
+.countdown.critical { animation: blink 0.4s steps(2) infinite; font-size: 32px; }
+.alarm {
+  position: absolute; inset: 0; animation: alarm 1s ease-in-out infinite;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 20, 50, 0.35));
+}
+@keyframes alarm { 50% { opacity: 0.15; } }
+.ships { position: absolute; right: 16px; top: 42px; font-size: 12px; letter-spacing: 0.2em; color: #2e7bff; }
+.prompt .mission { max-width: 360px; margin: 0 auto 14px; font-size: 12px; line-height: 1.6; color: #ffa31a; text-shadow: none; }
+.end {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none;
+  padding: 30px 44px; background: rgba(8, 2, 8, 0.88); border: 1px solid #ff2a4d; color: #ff2a4d;
+  box-shadow: 0 0 30px rgba(255, 42, 77, 0.5); text-align: center; min-width: 340px;
+  pointer-events: none;
+}
+.end.visible { display: block; }
+.end.won { border-color: var(--neon); color: var(--neon); box-shadow: 0 0 30px rgba(0, 229, 255, 0.45); }
+.end h1 { margin: 0 0 6px; letter-spacing: 0.3em; font-size: 30px; }
+.end h2 { margin: 0 0 18px; font-size: 13px; letter-spacing: 0.15em; font-weight: normal; color: #b9c6ff; text-shadow: none; }
+.end dl { display: grid; grid-template-columns: auto auto; gap: 6px 24px; margin: 0 auto 18px; width: max-content; font-size: 14px; }
+.end dt { text-align: left; color: #b9c6ff; text-shadow: none; }
+.end dd { margin: 0; text-align: right; }
+.end p { margin: 0; animation: blink 1.2s steps(2) infinite; }
