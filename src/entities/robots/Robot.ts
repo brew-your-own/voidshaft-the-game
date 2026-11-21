@@ -485,6 +485,7 @@ export class Robot implements Damageable {
     this.flash = Math.max(0, this.flash - dt);
     const m = this.mesh;
     m.object.quaternion.copy(this.quaternion);
+    for (const s of m.spin ?? []) s.object.rotateOnAxis(s.axis, s.speed * dt);
     let pulse = 1;
     if (this.tuning.ram) {
       // Mines spin and pulse faster as they close in.

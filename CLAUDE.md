@@ -4,7 +4,7 @@ An original browser-based 6DOF tunnel shooter inspired by Descent (1995), built 
 
 ## Where we are
 
-All 8 milestones are done; the vertical slice is complete. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
+Milestones 1–8 (the vertical slice) and 11 (enemy ship designs) are done; 9 (level selector and map viewer) is next, then 10 (five bigger levels). Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
 
 ## Commands
 
@@ -26,10 +26,11 @@ After editing a level source, run `npm run levels`: the game loads the exported 
 | `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, mesh builder, automap lines and seen-segment memory, level sources |
 | `src/physics/` | `Ship` (6DOF body), `Collision` (sphere against wall triangles, with sliding) |
 | `src/combat/` | `ProjectileSystem` (swept hits, homing, `explode` splash damage), player weapons, raycasts, the `Effects` interface |
-| `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, meshes, tuning) |
+| `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, tuning, models in `RobotMeshes`, shape helpers and merging in `meshKit`, design `proposals`) |
 | `src/fx/` | Particles, a fixed `LightPool`, `GameEffects` |
 | `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio |
-| `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView` |
+| `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
+| `src/shipyard/`, `shipyard.html` | Dev-only turntable page for robot models and proposals |
 | `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (main, pause, settings, controls) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
@@ -49,6 +50,7 @@ After editing a level source, run `npm run levels`: the game loads the exported 
 - **Lights:** the number of lights must stay constant at runtime, or every material recompiles. Use `LightPool` flashes rather than adding or removing lights.
 - **Performance:** the game is limited per pixel (lights and bloom), not by draw calls. New materials get compiled by `Game.warmUp()` only if their object is in the scene at load; otherwise they stall the first frame they appear in.
 - **Tuning:** gameplay numbers live in `*_TUNING` constants next to their code (`SHIP_TUNING`, `WEAPON_TUNING`, `ROBOT_TUNING`, `REACTOR_TUNING`, …).
+- **Robot models:** build from `meshKit` parts, face −Z, stay near the collision radius; `buildRobotMesh` merges them by material, so share material instances. Review new designs on `/shipyard.html`.
 - **Look:** untextured flat shading, a cyberpunk palette (`src/render/palette.ts`), emissive LEDs with `toneMapped: false`.
 
 ## Verifying in the browser

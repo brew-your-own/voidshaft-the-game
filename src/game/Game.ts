@@ -8,6 +8,7 @@ import { Door } from '../entities/Door';
 import { Pickup } from '../entities/Pickup';
 import { Reactor, type ReactorEvent } from '../entities/Reactor';
 import { Robot, type RobotWorld } from '../entities/robots/Robot';
+import { setRobotEnvironment } from '../entities/robots/RobotMeshes';
 import { Target } from '../entities/Target';
 import { GameEffects } from '../fx/GameEffects';
 import { distanceToTris } from '../physics/Collision';
@@ -20,6 +21,7 @@ import { Ship } from '../physics/Ship';
 import { AUTOMAP_TUNING, AutomapView, type AutomapState } from '../render/AutomapView';
 import { KEY_PALETTE, PALETTE, keyCss } from '../render/palette';
 import { PortalCuller } from '../render/PortalCuller';
+import { createNeonEnvironment } from '../render/NeonEnvironment';
 import { createRenderer, type RenderContext } from '../render/Renderer';
 import { ResolutionGovernor } from '../render/Resolution';
 import { HUD } from '../ui/HUD';
@@ -87,6 +89,8 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, levelData: LevelData) {
     this.ctx = createRenderer(canvas, this.scene, this.camera);
+    // Robot hulls reflect a neon room; level walls are unaffected.
+    setRobotEnvironment(createNeonEnvironment(this.ctx.renderer));
     this.input = new Input(canvas, () => this.settings.data.bindings);
     this.hud = new HUD(hudRoot);
     this.menu = new Menu(hudRoot, this.settings, {
