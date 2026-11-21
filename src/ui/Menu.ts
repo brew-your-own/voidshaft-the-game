@@ -21,14 +21,16 @@ interface Slider {
 const SLIDERS: Slider[] = [
   { key: 'mouseSensitivity', label: 'Mouse sensitivity', min: 0.2, max: 4, step: 0.05, format: (v) => `${v.toFixed(2)}×` },
   { key: 'fov', label: 'Field of view', min: 60, max: 110, step: 1, format: (v) => `${v}°` },
+  { key: 'renderScale', label: 'Resolution', min: 0.5, max: 1, step: 0.05, format: pct },
   { key: 'masterVolume', label: 'Master volume', min: 0, max: 1, step: 0.05, format: pct },
   { key: 'sfxVolume', label: 'Effects volume', min: 0, max: 1, step: 0.05, format: pct },
   { key: 'musicVolume', label: 'Music volume', min: 0, max: 1, step: 0.05, format: pct },
 ];
 
-const TOGGLES: { key: 'invertY' | 'showTelemetry'; label: string }[] = [
+const TOGGLES: { key: 'invertY' | 'showTelemetry' | 'adaptiveResolution'; label: string }[] = [
   { key: 'invertY', label: 'Invert mouse Y' },
-  { key: 'showTelemetry', label: 'Show telemetry (FPS, segment)' },
+  { key: 'adaptiveResolution', label: 'Lower resolution when slow' },
+  { key: 'showTelemetry', label: 'Show telemetry (FPS, draw calls)' },
 ];
 
 function pct(v: number): string {
@@ -87,7 +89,7 @@ export class Menu {
               <button data-go="settings">SETTINGS</button>
               <button data-go="controls">CONTROLS</button>
             </nav>
-            <p class="hint">Mouse to steer · Esc to pause</p>
+            <p class="hint">Mouse to steer · Tab for the map · Esc to pause</p>
           </div>`;
         break;
       case 'pause':

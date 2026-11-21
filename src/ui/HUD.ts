@@ -5,7 +5,15 @@ export interface HudState {
   speed: number;
   segment: number;
   fps: number;
+  /** Smoothed CPU time per frame, ms. */
+  cpuMs: number;
+  drawCalls: number;
+  triangles: number;
+  /** Render resolution as a fraction of native. */
+  resolution: number;
   locked: boolean;
+  /** The automap is open (game paused). */
+  automap: boolean;
   levelName: string;
   keys: KeyColor[];
   visibleSegments: number;
@@ -62,6 +70,16 @@ export class HUD {
       <div class="gauge shield"><label>SHIELD</label><div class="bar"><i></i></div><span></span></div>
       <div class="gauge energy"><label>ENERGY</label><div class="bar"><i></i></div><span></span></div>
       <div class="weapons"><div>LASER</div><div class="missiles">MISSILE <span></span></div></div>
+      <div class="automap-legend">
+        <h3>AUTOMAP</h3>
+        <p>Mouse: turn · Wheel or forward/back: zoom · Tab: close</p>
+        <ul>
+          <li style="--c:#7dff3a">▲ you</li>
+          <li style="--c:#ff2a4d">◆ reactor / sealed exit</li>
+          <li style="--c:#dfe8ff">▣ door</li>
+          ${KEY_SLOTS.map((k) => `<li style="--c:${k.css}">◆ ${k.color} key / door</li>`).join('')}
+        </ul>
+      </div>
       <div class="end"><h1></h1><h2></h2><dl></dl><p>Click or press Enter to play again</p></div>`;
     this.telemetry = root.querySelector('.telemetry')!;
     this.crosshair = root.querySelector('.crosshair')!;
@@ -119,32 +137,37 @@ export class HUD {
   update(s: HudState): void {
     const ended = this.endEl.classList.contains('visible');
     this.root.classList.toggle('paused', !s.locked && !ended);
-    this.shipsEl.textContent = `SHIPS ${'▲'.repeat(Math.max(0, s.ships))}`;
+    this.root.classList.toggle('automap', s.automap);
+    setText(this.shipsEl, `SHIPS ${'▲'.repeat(Math.max(0, s.ships))}`);
     const escaping = s.countdown !== null && !ended;
     this.countdownEl.style.display = escaping ? '' : 'none';
     this.alarmEl.style.display = escaping ? '' : 'none';
     if (escaping) {
       const t = s.countdown!;
-      this.countdownEl.textContent = `ESCAPE  ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+      setText(this.countdownEl, `ESCAPE  ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`);
       this.countdownEl.classList.toggle('critical', t < 10);
     }
     this.shieldBar.style.width = `${s.shield}%`;
-    this.shieldValue.textContent = String(Math.ceil(s.shield));
+    setText(this.shieldValue, String(Math.ceil(s.shield)));
     this.shieldBar.parentElement!.parentElement!.classList.toggle('low', s.shield < 25);
     this.energyBar.style.width = `${s.energy}%`;
-    this.energyValue.textContent = String(Math.floor(s.energy));
+    setText(this.energyValue, String(Math.floor(s.energy)));
     this.energyBar.parentElement!.parentElement!.classList.toggle('low', s.energy < 15);
-    this.missileValue.textContent = String(s.missiles).padStart(2, '0');
+    setText(this.missileValue, String(s.missiles).padStart(2, '0'));
     KEY_SLOTS.forEach((k, i) => this.keySlots[i].classList.toggle('owned', s.keys.includes(k.color)));
-    this.telemetry.textContent = this.showTelemetry
+    setText(this.telemetry, this.showTelemetry
       ? `${s.levelName}
 SPD ${s.speed.toFixed(1).padStart(5)}
 SEG ${String(s.segment).padStart(5)}
 VIS ${String(s.visibleSegments).padStart(5)}
+HOS ${String(s.hostiles).padStart(5)}
 FPS ${String(Math.round(s.fps)).padStart(5)}
-HOS ${String(s.hostiles).padStart(5)}`
+CPU ${s.cpuMs.toFixed(1).padStart(5)}ms
+DRW ${String(s.drawCalls).padStart(5)}
+TRI ${(s.triangles / 1000).toFixed(1).padStart(5)}k
+RES ${String(Math.round(s.resolution * 100)).padStart(5)}%`
       : `${s.levelName}
-HOSTILES ${s.hostiles}`;
+HOSTILES ${s.hostiles}`);
   }
 
   /** Crosshair flash when one of our shots connects. */
@@ -167,4 +190,9 @@ HOSTILES ${s.hostiles}`;
       this.impact.style.opacity = '0';
     });
   }
+}
+
+/** Writes text only when it changed, sparing the browser a relayout. */
+function setText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
 }

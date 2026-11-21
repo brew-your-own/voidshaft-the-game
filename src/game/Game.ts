@@ -12,13 +12,16 @@ import { Target } from '../entities/Target';
 import { GameEffects } from '../fx/GameEffects';
 import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
-import { Level } from '../level/Level';
+import { MapMemory } from '../level/automap';
+import { Level, type DoorState } from '../level/Level';
 import { buildLevelMesh } from '../level/LevelMesh';
 import type { KeyColor, LevelData, PickupKind } from '../level/types';
 import { Ship } from '../physics/Ship';
-import { keyCss } from '../render/palette';
+import { AUTOMAP_TUNING, AutomapView, type AutomapState } from '../render/AutomapView';
+import { KEY_PALETTE, PALETTE, keyCss } from '../render/palette';
 import { PortalCuller } from '../render/PortalCuller';
 import { createRenderer, type RenderContext } from '../render/Renderer';
+import { ResolutionGovernor } from '../render/Resolution';
 import { HUD } from '../ui/HUD';
 import { Menu } from '../ui/Menu';
 import { Objective } from './Objective';
@@ -75,6 +78,12 @@ export class Game {
   private accumulator = 0;
   private lastTime = 0;
   private fps = 60;
+  /** Smoothed CPU time spent in a frame, in ms. */
+  private cpuMs = 0;
+  private readonly governor = new ResolutionGovernor();
+  private readonly mapMemory: MapMemory;
+  private readonly automap: AutomapView;
+  private mapOpen = false;
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, levelData: LevelData) {
     this.ctx = createRenderer(canvas, this.scene, this.camera);
@@ -118,6 +127,8 @@ export class Game {
     this.targets = levelData.targets.map((t) => new Target(t, this.effects));
     for (const t of this.targets) this.segmentMeshes[t.segment].add(t.object);
     this.culler = new PortalCuller(this.level);
+    this.mapMemory = new MapMemory(this.level.segments.length);
+    this.automap = new AutomapView(this.level);
 
     this.projectiles = new ProjectileSystem(this.level, this.effects, () => this.damageables);
     const world: RobotWorld = {
@@ -150,6 +161,7 @@ export class Game {
     this.syncCamera(1);
     this.applySettings();
     this.settings.onChange(() => this.applySettings());
+    this.warmUp();
 
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = this;
   }
@@ -189,8 +201,26 @@ export class Game {
     return this.objective;
   }
 
+  /**
+   * Compiles every shader up front. Otherwise each robot type, the reactor
+   * and so on compile the first time they come into view, stalling a frame.
+   */
+  private warmUp(): void {
+    for (const g of this.segmentMeshes) g.visible = true;
+    for (const r of this.robots) r.object.visible = true;
+    for (const d of this.doors) d.object.visible = true;
+    // A real render, not renderer.compile(): the composer draws into an
+    // offscreen target, which needs different shader variants than the screen.
+    this.ctx.composer.render();
+    this.automap.update(0, this.mapState(), (d) => this.doorColor(d));
+    this.automap.render(this.ctx, this.camera.aspect);
+    this.cull();
+  }
+
   private applySettings(): void {
     const s = this.settings.data;
+    if (!s.adaptiveResolution) this.governor.reset();
+    this.ctx.setScale(s.renderScale * this.governor.scale);
     this.camera.fov = s.fov;
     this.camera.updateProjectionMatrix();
     this.ship.invertY = s.invertY;
@@ -200,6 +230,7 @@ export class Game {
 
   /** Mouse captured → fly; released mid-mission → pause menu. */
   private onLockChange(): void {
+    this.mapOpen = false;
     if (this.input.locked) {
       this.started = true;
       this.menu.hide();
@@ -218,13 +249,19 @@ export class Game {
   }
 
   private readonly frame = (time: number): void => {
+    const cpuStart = performance.now();
     const dt = Math.min((time - this.lastTime) / 1000, MAX_FRAME);
     this.lastTime = time;
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
 
     const locked = this.input.locked;
-    if (locked && this.endTimer < END_DELAY) {
+    if (locked && this.input.consumePress('automap') && !this.objective.over) this.toggleMap();
+    this.input.flushPresses();
+    if (this.mapOpen) {
+      this.steerMap(dt);
+    } else if (locked && this.endTimer < END_DELAY) {
       const { dx, dy } = this.input.consumeMouse();
+      this.input.consumeWheel();
       const k = this.settings.data.mouseSensitivity;
       if (this.player.alive) this.ship.applyMouse(dx * k, dy * k);
       this.accumulator += dt;
@@ -236,17 +273,30 @@ export class Game {
       this.updateFrame(dt);
     }
 
-    this.syncCamera(this.accumulator / STEP);
-    this.updateAudio(locked);
-    for (const r of this.robots) if (r.alive) r.syncObject(this.accumulator / STEP);
-    this.cull();
-    this.projectileRenderer.sync(this.projectiles.projectiles);
-    this.ctx.composer.render();
+    this.updateAudio(locked && !this.mapOpen);
+    const info = this.ctx.renderer.info;
+    info.reset();
+    if (this.mapOpen) {
+      this.automap.update(dt, this.mapState(), (d) => this.doorColor(d));
+      this.automap.render(this.ctx, this.camera.aspect);
+    } else {
+      this.syncCamera(this.accumulator / STEP);
+      for (const r of this.robots) if (r.alive) r.syncObject(this.accumulator / STEP);
+      this.cull();
+      this.projectileRenderer.sync(this.projectiles.projectiles);
+      this.ctx.composer.render();
+      if (locked && this.governor.update(dt, this.settings.data.adaptiveResolution)) this.applySettings();
+    }
     this.hud.update({
       speed: this.ship.velocity.length(),
       segment: this.ship.segment,
       fps: this.fps,
+      cpuMs: this.cpuMs,
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      resolution: this.ctx.scale,
       locked,
+      automap: this.mapOpen,
       levelName: this.level.name,
       keys: [...this.player.keys],
       visibleSegments: this.culler.visible.filter(Boolean).length,
@@ -258,8 +308,47 @@ export class Game {
       ships: this.objective.ships,
       countdown: this.objective.state === 'escape' ? this.objective.timeLeft : null,
     });
+    this.cpuMs += (performance.now() - cpuStart - this.cpuMs) * 0.05;
     requestAnimationFrame(this.frame);
   };
+
+  /** Opens or closes the automap. The game is paused while it is open. */
+  private toggleMap(): void {
+    this.mapOpen = !this.mapOpen;
+    this.input.consumeMouse();
+    this.input.consumeWheel();
+    this.audio.play('uiClick');
+    if (this.mapOpen) this.automap.open(this.mapState());
+  }
+
+  /** Mouse turns the map, the wheel or forward/back keys zoom. */
+  private steerMap(dt: number): void {
+    const t = AUTOMAP_TUNING;
+    const { dx, dy } = this.input.consumeMouse();
+    this.automap.rotate(dx, dy);
+    const keys = (this.input.held('back') ? 1 : 0) - (this.input.held('forward') ? 1 : 0);
+    this.automap.zoom(Math.exp(this.input.consumeWheel() * t.wheelZoom + keys * t.keyZoom * dt));
+  }
+
+  private mapState(): AutomapState {
+    const r = this.reactor;
+    return {
+      seen: this.mapMemory.seen,
+      shipPosition: this.ship.position,
+      shipQuaternion: this.ship.quaternion,
+      reactor: r ? { position: r.position, segment: r.segment, alive: !r.destroyed } : null,
+      keys: this.pickups.flatMap((p) => (p.type.kind === 'key'
+        ? [{ color: p.type.color, position: p.position, segment: p.segment, collected: p.collected }]
+        : [])),
+    };
+  }
+
+  /** Automap door colours: key colour, red sealed exit, green open exit. */
+  private doorColor(d: DoorState): Color {
+    if (d.exit) return new Color(this.objective.state === 'escape' ? PALETTE.lime : PALETTE.red).multiplyScalar(2);
+    if (d.key) return new Color(KEY_PALETTE[d.key]).multiplyScalar(2);
+    return new Color(PALETTE.white).multiplyScalar(0.9);
+  }
 
   private updateAudio(active: boolean): void {
     const a = this.audio;
@@ -485,6 +574,7 @@ export class Game {
       return !door || door.openAmount > 0.01;
     });
     this.segmentMeshes.forEach((g, i) => { g.visible = visible[i]; });
+    if (this.mapMemory.markVisible(visible)) this.automap.invalidate();
     for (const r of this.robots) r.object.visible = r.alive && visible[r.segment];
     for (const d of this.doors) {
       d.object.visible = (visible[d.state.segment] || visible[d.state.child]) && d.state.openAmount < 0.995;

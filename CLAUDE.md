@@ -4,7 +4,7 @@ An original browser-based 6DOF tunnel shooter inspired by Descent (1995), built 
 
 ## Where we are
 
-Milestones 1–7 of 8 are done; milestone 8 (performance, automap) is next. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
+All 8 milestones are done; the vertical slice is complete. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
 
 ## Commands
 
@@ -23,13 +23,13 @@ After editing a level source, run `npm run levels`: the game loads the exported 
 | Path | What lives there |
 |---|---|
 | `src/game/` | `Game` (main loop with a fixed 120 Hz step, wiring), `Player`, `Objective` (mission state machine), `Settings` (stored settings, key bindings) |
-| `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, mesh builder, level sources |
+| `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, mesh builder, automap lines and seen-segment memory, level sources |
 | `src/physics/` | `Ship` (6DOF body), `Collision` (sphere against wall triangles, with sliding) |
 | `src/combat/` | `ProjectileSystem` (swept hits, homing, `explode` splash damage), player weapons, raycasts, the `Effects` interface |
 | `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, meshes, tuning) |
 | `src/fx/` | Particles, a fixed `LightPool`, `GameEffects` |
 | `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio |
-| `src/render/` | Renderer and bloom, palette, materials (where textures will plug in later), portal culler |
+| `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView` |
 | `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (main, pause, settings, controls) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
@@ -47,6 +47,7 @@ After editing a level source, run `npm run levels`: the game loads the exported 
   - Wall normals point into the segment.
   - Put doors on narrow necks, not room walls. Call `door()` / `exit()` after the `extrude` that creates the portal.
 - **Lights:** the number of lights must stay constant at runtime, or every material recompiles. Use `LightPool` flashes rather than adding or removing lights.
+- **Performance:** the game is limited per pixel (lights and bloom), not by draw calls. New materials get compiled by `Game.warmUp()` only if their object is in the scene at load; otherwise they stall the first frame they appear in.
 - **Tuning:** gameplay numbers live in `*_TUNING` constants next to their code (`SHIP_TUNING`, `WEAPON_TUNING`, `ROBOT_TUNING`, `REACTOR_TUNING`, …).
 - **Look:** untextured flat shading, a cyberpunk palette (`src/render/palette.ts`), emissive LEDs with `toneMapped: false`.
 

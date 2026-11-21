@@ -84,6 +84,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 }
 .missile-warning.on { display: block; }
 
+/* ---- Automap ---- */
+.automap-legend {
+  position: absolute; left: 16px; bottom: 96px; display: none; padding: 10px 14px;
+  background: rgba(4, 4, 14, 0.7); border: 1px solid rgba(0, 229, 255, 0.4); font-size: 11px;
+}
+.automap-legend h3 { margin: 0 0 4px; letter-spacing: 0.3em; font-size: 13px; }
+.automap-legend p { margin: 0 0 8px; color: #b9c6ff; text-shadow: none; }
+.automap-legend ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.automap-legend li { color: var(--c); text-shadow: 0 0 6px var(--c); text-transform: uppercase; letter-spacing: 0.1em; }
+#hud.automap .automap-legend { display: block; }
+#hud.automap .crosshair, #hud.automap .missile-warning, #hud.automap .message { display: none; }
+
 /* ---- Menus ---- */
 .menu {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

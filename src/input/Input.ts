@@ -21,8 +21,11 @@ export interface FlightControls {
  */
 export class Input {
   private readonly keys = new Set<string>();
+  /** Keys pressed (not auto-repeated) since the last `flushPresses`. */
+  private readonly presses = new Set<string>();
   private mouseDX = 0;
   private mouseDY = 0;
+  private wheel = 0;
   readonly buttons = new Set<number>();
   constructor(
     private readonly target: HTMLElement,
@@ -30,6 +33,7 @@ export class Input {
   ) {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      if (!e.repeat) this.presses.add(e.code);
       if (this.locked && (e.code === 'Tab' || e.code === 'Space')) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -39,6 +43,9 @@ export class Input {
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
+    document.addEventListener('wheel', (e) => {
+      if (this.locked) this.wheel += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    }, { passive: true });
     target.addEventListener('mousedown', (e) => {
       if (this.locked) this.buttons.add(e.button);
     });
@@ -50,7 +57,8 @@ export class Input {
   requestLock(): void {
     this.keys.clear();
     this.buttons.clear();
-    this.mouseDX = this.mouseDY = 0;
+    this.mouseDX = this.mouseDY = this.wheel = 0;
+    this.presses.clear();
     // Browsers refuse re-locking for about a second after Esc; the caller
     // just leaves its menu up, so a second click works.
     Promise.resolve(this.target.requestPointerLock()).catch(() => {});
@@ -66,6 +74,31 @@ export class Input {
     this.mouseDX = 0;
     this.mouseDY = 0;
     return r;
+  }
+
+  /** Wheel movement since last call, in pixels (positive = towards the user). */
+  consumeWheel(): number {
+    const w = this.wheel;
+    this.wheel = 0;
+    return w;
+  }
+
+  /** True once per press of a key bound to `action`. */
+  consumePress(action: Action): boolean {
+    for (const code of this.bindings()[action]) {
+      if (this.presses.delete(code)) return true;
+    }
+    return false;
+  }
+
+  /** Forgets presses nobody consumed this frame. */
+  flushPresses(): void {
+    this.presses.clear();
+  }
+
+  /** Whether a key bound to `action` is held. */
+  held(action: Action): boolean {
+    return this.bindings()[action].some((k) => this.keys.has(k));
   }
 
   isDown(code: string): boolean {

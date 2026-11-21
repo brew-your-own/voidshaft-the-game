@@ -47,6 +47,15 @@ describe('Settings', () => {
     expect(s.data.fov).toBe(100);
   });
 
+  it('clamps the render scale and fills in actions added later', () => {
+    const old = { bindings: { forward: ['KeyI'] }, renderScale: 0.1, adaptiveResolution: false };
+    const s = Settings.parse(JSON.stringify(old));
+    expect(s.renderScale).toBe(0.5);
+    expect(s.adaptiveResolution).toBe(false);
+    expect(s.bindings.forward).toEqual(['KeyI']);
+    expect(s.bindings.automap).toEqual(['Tab']);
+  });
+
   it('names keys readably', () => {
     expect(keyName('KeyQ')).toBe('Q');
     expect(keyName('ShiftLeft')).toBe('L-Shift');

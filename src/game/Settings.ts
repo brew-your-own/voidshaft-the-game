@@ -2,7 +2,7 @@
 export type Action =
   | 'forward' | 'back' | 'strafeLeft' | 'strafeRight' | 'up' | 'down'
   | 'rollLeft' | 'rollRight' | 'boost' | 'missile'
-  | 'lookUp' | 'lookDown' | 'lookLeft' | 'lookRight';
+  | 'lookUp' | 'lookDown' | 'lookLeft' | 'lookRight' | 'automap';
 
 export const ACTION_LABELS: Record<Action, string> = {
   forward: 'Forward',
@@ -19,6 +19,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   lookDown: 'Look down',
   lookLeft: 'Look left',
   lookRight: 'Look right',
+  automap: 'Automap',
 };
 
 export type Bindings = Record<Action, string[]>;
@@ -38,6 +39,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   lookDown: ['ArrowDown'],
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],
+  automap: ['Tab'],
 };
 
 export interface SettingsData {
@@ -49,6 +51,10 @@ export interface SettingsData {
   sfxVolume: number;
   musicVolume: number;
   showTelemetry: boolean;
+  /** Fraction of the native resolution to render at (0.5–1). */
+  renderScale: number;
+  /** Lower the resolution automatically when frames take too long. */
+  adaptiveResolution: boolean;
   bindings: Bindings;
 }
 
@@ -60,6 +66,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
   sfxVolume: 0.9,
   musicVolume: 0.5,
   showTelemetry: false,
+  renderScale: 1,
+  adaptiveResolution: true,
   bindings: DEFAULT_BINDINGS,
 };
 
@@ -109,8 +117,10 @@ export class Settings {
     num('masterVolume', 0, 1);
     num('sfxVolume', 0, 1);
     num('musicVolume', 0, 1);
-    if (typeof p.invertY === 'boolean') out.invertY = p.invertY;
-    if (typeof p.showTelemetry === 'boolean') out.showTelemetry = p.showTelemetry;
+    num('renderScale', 0.5, 1);
+    for (const k of ['invertY', 'showTelemetry', 'adaptiveResolution'] as const) {
+      if (typeof p[k] === 'boolean') out[k] = p[k];
+    }
     if (p.bindings && typeof p.bindings === 'object') {
       const b = p.bindings as Record<string, unknown>;
       for (const action of Object.keys(DEFAULT_BINDINGS) as Action[]) {
