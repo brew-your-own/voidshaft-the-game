@@ -169,6 +169,7 @@ export class Reactor implements Damageable {
     if (!this.alive || amount <= 0) return;
     if (this.shielded) {
       this.shieldFlash = 0.25;
+      this.effects.sound('shieldHit', hitPoint);
       this.events.push('shield-hit');
       return;
     }
@@ -234,10 +235,12 @@ export class Reactor implements Damageable {
         this.projectiles.spawn('laser', 'enemy', muzzle, dir, seg, { speed: t.volley.speed, damageScale: t.volley.damageScale });
       }
       this.effects.muzzleFlash(muzzle, PALETTE.red);
+      this.effects.sound('enemyLaser', muzzle);
     }
     if (!this.shielded && this.missileTimer <= 0) {
       this.missileTimer = t.missile.interval;
       this.projectiles.spawn('missile', 'enemy', muzzle, aim, seg, { speed: t.missile.speed, damageScale: t.missile.damageScale });
+      this.effects.sound('enemyMissile', muzzle);
     }
   }
 

@@ -24,15 +24,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
   position: absolute; inset: 0; opacity: 0;
   background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 30, 70, 0.9));
 }
-.prompt {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  padding: 28px 36px; background: rgba(4, 4, 14, 0.82); border: 1px solid var(--neon-2);
-  box-shadow: 0 0 24px rgba(255, 43, 214, 0.45); text-align: center; min-width: 320px;
-}
-.prompt h1 { margin: 0 0 6px; color: var(--neon-2); letter-spacing: 0.35em; font-size: 30px; }
-.prompt p { margin: 0 0 16px; animation: blink 1.2s steps(2) infinite; }
-.prompt ul { list-style: none; margin: 0; padding: 0; text-align: left; font-size: 13px; line-height: 1.8; color: #b9c6ff; text-shadow: none; }
-.prompt b { color: var(--neon); display: inline-block; min-width: 90px; }
 @keyframes blink { 50% { opacity: 0.35; } }
 .fatal { position: absolute; left: 16px; top: 16px; color: #ff2a4d; white-space: pre-wrap; }
 .keys { position: absolute; right: 16px; top: 14px; display: flex; gap: 8px; }
@@ -68,7 +59,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 }
 @keyframes alarm { 50% { opacity: 0.15; } }
 .ships { position: absolute; right: 16px; top: 42px; font-size: 12px; letter-spacing: 0.2em; color: #2e7bff; }
-.prompt .mission { max-width: 360px; margin: 0 auto 14px; font-size: 12px; line-height: 1.6; color: #ffa31a; text-shadow: none; }
 .end {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none;
   padding: 30px 44px; background: rgba(8, 2, 8, 0.88); border: 1px solid #ff2a4d; color: #ff2a4d;
@@ -83,3 +73,55 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 .end dt { text-align: left; color: #b9c6ff; text-shadow: none; }
 .end dd { margin: 0; text-align: right; }
 .end p { margin: 0; animation: blink 1.2s steps(2) infinite; }
+
+/* ---- HUD extras ---- */
+#hud.paused .crosshair, #hud.paused .missile-warning { display: none; }
+.crosshair.hit { animation: hit 0.18s ease-out; }
+@keyframes hit { 0% { border-color: #fff; box-shadow: 0 0 16px #fff; transform: translate(-50%, -50%) scale(1.35); } }
+.missile-warning {
+  position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); display: none;
+  color: #ff2a4d; font-size: 13px; letter-spacing: 0.3em; animation: blink 0.3s steps(2) infinite;
+}
+.missile-warning.on { display: block; }
+
+/* ---- Menus ---- */
+.menu {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(4, 4, 14, 0.55), rgba(2, 2, 6, 0.85));
+  pointer-events: auto; padding: 16px;
+}
+.menu .panel {
+  background: rgba(4, 4, 14, 0.88); border: 1px solid var(--neon-2); box-shadow: 0 0 28px rgba(255, 43, 214, 0.4);
+  padding: 28px 36px; min-width: 320px; max-width: 100%; max-height: 100%; overflow-y: auto; text-align: center;
+}
+.menu .panel.wide { width: 560px; }
+.menu h1 { margin: 0 0 8px; color: var(--neon-2); letter-spacing: 0.35em; font-size: 34px; }
+.menu h2 { margin: 0 0 18px; color: var(--neon-2); letter-spacing: 0.3em; font-size: 20px; }
+.menu .tag { margin: 0 0 18px; font-size: 11px; letter-spacing: 0.25em; color: #b9c6ff; text-shadow: none; }
+.menu .mission { max-width: 380px; margin: 0 auto 22px; font-size: 13px; line-height: 1.6; color: #ffa31a; text-shadow: none; }
+.menu .hint { margin: 16px 0 0; font-size: 11px; color: #7f8bbd; text-shadow: none; letter-spacing: 0.1em; }
+.menu nav { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.menu nav.inline { flex-direction: row; justify-content: center; margin-top: 20px; }
+.menu button {
+  font: inherit; font-size: 14px; letter-spacing: 0.25em; color: var(--neon); background: transparent;
+  border: 1px solid currentColor; padding: 9px 22px; min-width: 210px; cursor: pointer; text-shadow: 0 0 6px currentColor;
+}
+.menu nav.inline button { min-width: 0; }
+.menu button:hover, .menu button:focus-visible { background: rgba(0, 229, 255, 0.12); box-shadow: 0 0 14px rgba(0, 229, 255, 0.5); outline: none; }
+.menu button.primary { color: var(--neon-2); }
+.menu button.primary:hover { background: rgba(255, 43, 214, 0.12); box-shadow: 0 0 14px rgba(255, 43, 214, 0.5); }
+.menu .rows { display: flex; flex-direction: column; gap: 10px; text-align: left; font-size: 13px; }
+.menu .row { display: grid; grid-template-columns: 1fr 180px 56px; align-items: center; gap: 12px; color: #b9c6ff; text-shadow: none; }
+.menu .row.toggle { grid-template-columns: 1fr auto; }
+.menu .binds .row { grid-template-columns: 1fr 190px; }
+.menu .row i { color: #7f8bbd; font-style: normal; font-size: 11px; }
+.menu .row output { color: var(--neon); text-align: right; }
+.menu .row b.fixed { color: #7f8bbd; text-align: center; font-weight: normal; }
+.menu input[type=range] { accent-color: var(--neon-2); width: 100%; }
+.menu input[type=checkbox] { accent-color: var(--neon-2); width: 18px; height: 18px; }
+.menu button.bind { min-width: 0; padding: 5px 10px; font-size: 12px; letter-spacing: 0.1em; }
+.menu button.bind.capturing { color: #ffa31a; animation: blink 0.6s steps(2) infinite; }
+@media (max-width: 600px) {
+  .menu .panel { padding: 20px 16px; min-width: 0; }
+  .menu .row { grid-template-columns: 1fr 110px 48px; }
+}

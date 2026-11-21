@@ -1,3 +1,5 @@
+import { DEFAULT_BINDINGS, type Action, type Bindings } from '../game/Settings';
+
 export interface FlightControls {
   forward: number; // -1..1
   strafe: number; // -1..1 (right +)
@@ -8,23 +10,27 @@ export interface FlightControls {
   boost: boolean;
   /** Primary weapon (laser): left mouse. */
   firePrimary: boolean;
-  /** Secondary weapon (missile): right mouse or X. */
+  /** Secondary weapon (missile): right mouse or the missile key. */
   fireSecondary: boolean;
 }
 
-/** Keyboard + pointer-locked mouse. Keys use KeyboardEvent.code (layout independent). */
+/**
+ * Keyboard + pointer-locked mouse. Keys use KeyboardEvent.code (layout
+ * independent) and go through the player's bindings. Capturing the mouse
+ * is up to the menus (`requestLock`).
+ */
 export class Input {
   private readonly keys = new Set<string>();
   private mouseDX = 0;
   private mouseDY = 0;
   readonly buttons = new Set<number>();
-  /** When false, clicking no longer captures the mouse (end screen). */
-  lockEnabled = true;
-
-  constructor(private readonly target: HTMLElement) {
+  constructor(
+    private readonly target: HTMLElement,
+    private readonly bindings: () => Bindings = () => DEFAULT_BINDINGS,
+  ) {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
-      if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+      if (this.locked && (e.code === 'Tab' || e.code === 'Space')) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => { this.keys.clear(); this.buttons.clear(); });
@@ -34,14 +40,20 @@ export class Input {
       this.mouseDY += e.movementY;
     });
     target.addEventListener('mousedown', (e) => {
-      if (!this.locked) {
-        if (this.lockEnabled) void target.requestPointerLock();
-        return;
-      }
-      this.buttons.add(e.button);
+      if (this.locked) this.buttons.add(e.button);
     });
     window.addEventListener('mouseup', (e) => this.buttons.delete(e.button));
     target.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** Captures the mouse. Must run inside a user gesture (a click). */
+  requestLock(): void {
+    this.keys.clear();
+    this.buttons.clear();
+    this.mouseDX = this.mouseDY = 0;
+    // Browsers refuse re-locking for about a second after Esc; the caller
+    // just leaves its menu up, so a second click works.
+    Promise.resolve(this.target.requestPointerLock()).catch(() => {});
   }
 
   get locked(): boolean {
@@ -61,18 +73,19 @@ export class Input {
   }
 
   controls(): FlightControls {
-    const axis = (pos: string[], neg: string[]) =>
-      (pos.some((k) => this.keys.has(k)) ? 1 : 0) - (neg.some((k) => this.keys.has(k)) ? 1 : 0);
+    const b = this.bindings();
+    const down = (a: Action) => b[a].some((k) => this.keys.has(k));
+    const axis = (pos: Action, neg: Action) => (down(pos) ? 1 : 0) - (down(neg) ? 1 : 0);
     return {
-      forward: axis(['KeyW'], ['KeyS']),
-      strafe: axis(['KeyD'], ['KeyA']),
-      lift: axis(['Space', 'KeyR'], ['KeyC', 'KeyF']),
-      roll: axis(['KeyE'], ['KeyQ']),
-      pitch: axis(['ArrowDown'], ['ArrowUp']),
-      yaw: axis(['ArrowLeft'], ['ArrowRight']),
-      boost: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      forward: axis('forward', 'back'),
+      strafe: axis('strafeRight', 'strafeLeft'),
+      lift: axis('up', 'down'),
+      roll: axis('rollRight', 'rollLeft'),
+      pitch: axis('lookDown', 'lookUp'),
+      yaw: axis('lookLeft', 'lookRight'),
+      boost: down('boost'),
       firePrimary: this.locked && this.buttons.has(0),
-      fireSecondary: this.locked && (this.buttons.has(2) || this.keys.has('KeyX')),
+      fireSecondary: this.locked && (this.buttons.has(2) || down('missile')),
     };
   }
 }

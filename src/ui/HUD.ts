@@ -31,10 +31,13 @@ const END_ARM_DELAY_MS = 600;
 
 const KEY_SLOTS = (['blue', 'gold', 'red'] as const).map((color) => ({ color, css: keyCss(color) }));
 
-/** DOM overlay: crosshair, telemetry readout and the click-to-fly prompt. */
+/** DOM overlay: crosshair, gauges, messages, countdown and end screen. */
 export class HUD {
   private readonly telemetry: HTMLElement;
-  private readonly prompt: HTMLElement;
+  /** Debug readout (FPS, segment) is optional; the level name always shows. */
+  showTelemetry = false;
+  private readonly crosshair: HTMLElement;
+  private readonly warningEl: HTMLElement;
   private readonly impact: HTMLElement;
   private readonly keySlots: HTMLElement[];
   private readonly messageEl: HTMLElement;
@@ -45,9 +48,10 @@ export class HUD {
   private readonly energyValue: HTMLElement;
   private readonly missileValue: HTMLElement;
 
-  constructor(root: HTMLElement) {
+  constructor(private readonly root: HTMLElement) {
     root.innerHTML = `
       <div class="crosshair"></div>
+      <div class="missile-warning">⚠ MISSILE</div>
       <div class="telemetry"></div>
       <div class="impact"></div>
       <div class="keys">${KEY_SLOTS.map((k) => `<span class="key" style="--key:${k.css}"></span>`).join('')}</div>
@@ -58,25 +62,10 @@ export class HUD {
       <div class="gauge shield"><label>SHIELD</label><div class="bar"><i></i></div><span></span></div>
       <div class="gauge energy"><label>ENERGY</label><div class="bar"><i></i></div><span></span></div>
       <div class="weapons"><div>LASER</div><div class="missiles">MISSILE <span></span></div></div>
-      <div class="prompt">
-        <h1>VOIDSHAFT</h1>
-        <p>Click to fly</p>
-        <div class="mission">Find the keys, destroy the reactor, then escape through the exit before the mine collapses.</div>
-        <ul>
-          <li><b>Mouse</b> pitch / yaw</li>
-          <li><b>LMB</b> laser &nbsp; <b>RMB / X</b> homing missile</li>
-          <li><b>W S</b> forward / back</li>
-          <li><b>A D</b> strafe</li>
-          <li><b>Space C</b> (or R F) up / down</li>
-          <li><b>Q E</b> roll</li>
-          <li><b>Doors</b> fly close to open; locked ones need the key</li>
-          <li><b>Shift</b> boost &nbsp; <b>Arrows</b> keyboard look</li>
-          <li><b>Esc</b> release mouse</li>
-        </ul>
-      </div>
       <div class="end"><h1></h1><h2></h2><dl></dl><p>Click or press Enter to play again</p></div>`;
     this.telemetry = root.querySelector('.telemetry')!;
-    this.prompt = root.querySelector('.prompt')!;
+    this.crosshair = root.querySelector('.crosshair')!;
+    this.warningEl = root.querySelector('.missile-warning')!;
     this.impact = root.querySelector('.impact')!;
     this.keySlots = [...root.querySelectorAll<HTMLElement>('.key')];
     this.messageEl = root.querySelector('.message')!;
@@ -129,7 +118,7 @@ export class HUD {
 
   update(s: HudState): void {
     const ended = this.endEl.classList.contains('visible');
-    this.prompt.style.display = s.locked || ended ? 'none' : '';
+    this.root.classList.toggle('paused', !s.locked && !ended);
     this.shipsEl.textContent = `SHIPS ${'▲'.repeat(Math.max(0, s.ships))}`;
     const escaping = s.countdown !== null && !ended;
     this.countdownEl.style.display = escaping ? '' : 'none';
@@ -147,8 +136,26 @@ export class HUD {
     this.energyBar.parentElement!.parentElement!.classList.toggle('low', s.energy < 15);
     this.missileValue.textContent = String(s.missiles).padStart(2, '0');
     KEY_SLOTS.forEach((k, i) => this.keySlots[i].classList.toggle('owned', s.keys.includes(k.color)));
-    this.telemetry.textContent =
-      `${s.levelName}\nSPD ${s.speed.toFixed(1).padStart(5)}\nSEG ${String(s.segment).padStart(5)}\nVIS ${String(s.visibleSegments).padStart(5)}\nFPS ${String(Math.round(s.fps)).padStart(5)}\nHOS ${String(s.hostiles).padStart(5)}`;
+    this.telemetry.textContent = this.showTelemetry
+      ? `${s.levelName}
+SPD ${s.speed.toFixed(1).padStart(5)}
+SEG ${String(s.segment).padStart(5)}
+VIS ${String(s.visibleSegments).padStart(5)}
+FPS ${String(Math.round(s.fps)).padStart(5)}
+HOS ${String(s.hostiles).padStart(5)}`
+      : `${s.levelName}
+HOSTILES ${s.hostiles}`;
+  }
+
+  /** Crosshair flash when one of our shots connects. */
+  hitMarker(): void {
+    this.crosshair.classList.remove('hit');
+    void this.crosshair.offsetWidth; // restart the animation
+    this.crosshair.classList.add('hit');
+  }
+
+  missileWarning(on: boolean): void {
+    this.warningEl.classList.toggle('on', on);
   }
 
   /** Brief red flash when scraping a wall hard. */

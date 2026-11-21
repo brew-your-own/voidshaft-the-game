@@ -1,4 +1,5 @@
 import { Color, Group, Vector3 } from 'three';
+import { NO_SOUND, type SoundName, type SoundSink } from '../audio/Audio';
 import type { Effects } from '../combat/types';
 import { LightPool } from './LightPool';
 import { Particles } from './Particles';
@@ -21,8 +22,12 @@ export class GameEffects implements Effects {
   readonly particles = new Particles();
   readonly lights = new LightPool();
 
-  constructor() {
+  constructor(private readonly audio: SoundSink = NO_SOUND) {
     this.object.add(this.particles.object, this.lights.object);
+  }
+
+  sound(name: SoundName, pos?: Vector3, scale?: number): void {
+    this.audio.play(name, pos, scale);
   }
 
   update(dt: number): void {
@@ -47,6 +52,7 @@ export class GameEffects implements Effects {
       });
     }
     this.lights.flash(pos, color, 1.0, 0.12, 8);
+    this.audio.play('impact', pos);
   }
 
   explosion(pos: Vector3, size: number, color: number): void {
@@ -67,6 +73,7 @@ export class GameEffects implements Effects {
       this.particles.emit({ position: pos, velocity: _v, color: hot.clone().multiplyScalar(1.5), life: 0.3 + Math.random() * 0.3 });
     }
     this.lights.flash(pos, 0xffb060, 8 * size, 0.5, 20 * size);
+    this.audio.play('explosion', pos, size);
   }
 
   trail(pos: Vector3, color: number): void {

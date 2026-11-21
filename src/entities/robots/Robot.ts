@@ -185,7 +185,10 @@ export class Robot implements Damageable {
     const wasPatrolling = this.state === 'patrol';
     this.lastSeen.copy(p.position);
     this.lastSeenSegment = p.segment;
-    if (wasPatrolling) this.alert(p.position, p.segment, true);
+    if (wasPatrolling) {
+      this.world.effects.sound('alert', this.position);
+      this.alert(p.position, p.segment, true);
+    }
   }
 
   /** Switches from patrol to combat, with a short reaction delay. */
@@ -397,6 +400,7 @@ export class Robot implements Damageable {
     }
     this.world.projectiles.spawn(gun.kind, 'enemy', muzzle, dir, seg, { speed: gun.speed, damageScale: gun.damageScale });
     this.world.effects.muzzleFlash(muzzle, this.tuning.color);
+    this.world.effects.sound(gun.kind === 'laser' ? 'enemyLaser' : 'enemyMissile', muzzle);
   }
 
   private checkRam(): void {

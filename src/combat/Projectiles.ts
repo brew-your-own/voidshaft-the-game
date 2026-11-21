@@ -55,6 +55,8 @@ const _axis = new Vector3();
 /** Moves projectiles, resolves hits against walls, doors and damageables. */
 export class ProjectileSystem {
   readonly projectiles: Projectile[] = [];
+  /** Direct hits by player shots since last read (HUD hit marker). */
+  playerHits = 0;
 
   constructor(
     private readonly level: Level,
@@ -111,6 +113,7 @@ export class ProjectileSystem {
       if (t >= 0 && t < tBest) { tBest = t; victim = d; }
     }
 
+    if (victim && p.faction === 'player') this.playerHits++;
     if (victim || wall) {
       _hit.lerpVectors(p.position, _next, tBest);
       if (victim) _normal.subVectors(_hit, victim.position).normalize();

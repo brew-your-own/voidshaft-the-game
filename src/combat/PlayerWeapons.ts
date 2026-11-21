@@ -42,6 +42,7 @@ export class PlayerWeapons {
         this.player.energy -= GUN_TUNING.laserEnergy;
         this.laserTimer = GUN_TUNING.laserCooldown;
         for (const mount of GUN_TUNING.laserMounts) this.fire('laser', mount);
+        this.effects.sound('laser');
       } else {
         event = 'no-energy';
         this.laserTimer = 0.5;
@@ -53,6 +54,7 @@ export class PlayerWeapons {
         this.player.missiles--;
         this.missileTimer = GUN_TUNING.missileCooldown;
         this.fire('missile', GUN_TUNING.missileMounts[this.missileSide]);
+        this.effects.sound('missile');
         this.missileSide = 1 - this.missileSide;
       } else {
         event = 'no-missiles';

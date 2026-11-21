@@ -1,4 +1,5 @@
 import type { Vector3 } from 'three';
+import type { SoundName } from '../audio/Audio';
 
 export type Faction = 'player' | 'enemy';
 
@@ -19,6 +20,8 @@ export interface Effects {
   impact(pos: Vector3, normal: Vector3, color: number): void;
   explosion(pos: Vector3, size: number, color: number): void;
   trail(pos: Vector3, color: number): void;
+  /** One-shot sound, optionally positioned in the world. */
+  sound(name: SoundName, pos?: Vector3, scale?: number): void;
 }
 
 export const NO_EFFECTS: Effects = {
@@ -26,4 +29,5 @@ export const NO_EFFECTS: Effects = {
   impact() {},
   explosion() {},
   trail() {},
+  sound() {},
 };

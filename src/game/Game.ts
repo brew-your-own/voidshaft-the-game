@@ -1,4 +1,5 @@
 import { Color, FogExp2, Group, HemisphereLight, PerspectiveCamera, PointLight, Scene } from 'three';
+import { AudioEngine } from '../audio/Audio';
 import { PlayerWeapons } from '../combat/PlayerWeapons';
 import { ProjectileRenderer } from '../combat/ProjectileRenderer';
 import { ProjectileSystem } from '../combat/Projectiles';
@@ -19,8 +20,10 @@ import { keyCss } from '../render/palette';
 import { PortalCuller } from '../render/PortalCuller';
 import { createRenderer, type RenderContext } from '../render/Renderer';
 import { HUD } from '../ui/HUD';
+import { Menu } from '../ui/Menu';
 import { Objective } from './Objective';
 import { Player } from './Player';
+import { Settings } from './Settings';
 
 const SIM_HZ = 120;
 const STEP = 1 / SIM_HZ;
@@ -56,7 +59,13 @@ export class Game {
   private endTimer = -1;
   private shake = 0;
   private readonly culler: PortalCuller;
-  private readonly effects = new GameEffects();
+  private readonly settings = new Settings();
+  private readonly audio = new AudioEngine();
+  private readonly effects = new GameEffects(this.audio);
+  private readonly menu: Menu;
+  private started = false;
+  private lastBeep = -1;
+  private warningTimer = 0;
   private readonly projectiles: ProjectileSystem;
   private readonly projectileRenderer = new ProjectileRenderer();
   private readonly weapons: PlayerWeapons;
@@ -69,8 +78,20 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, levelData: LevelData) {
     this.ctx = createRenderer(canvas, this.scene, this.camera);
-    this.input = new Input(canvas);
+    this.input = new Input(canvas, () => this.settings.data.bindings);
     this.hud = new HUD(hudRoot);
+    this.menu = new Menu(hudRoot, this.settings, {
+      onPlay: () => {
+        this.audio.unlock();
+        this.input.requestLock();
+      },
+      onRestart: () => window.location.reload(),
+      onClick: () => {
+        this.audio.unlock();
+        this.audio.play('uiClick');
+      },
+    });
+    document.addEventListener('pointerlockchange', () => this.onLockChange());
     this.level = new Level(levelData);
     this.ship = new Ship(this.level);
     this.player = new Player(this.ship);
@@ -127,6 +148,8 @@ export class Game {
     this.camera.add(headlight);
     this.scene.add(this.camera);
     this.syncCamera(1);
+    this.applySettings();
+    this.settings.onChange(() => this.applySettings());
 
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = this;
   }
@@ -166,6 +189,27 @@ export class Game {
     return this.objective;
   }
 
+  private applySettings(): void {
+    const s = this.settings.data;
+    this.camera.fov = s.fov;
+    this.camera.updateProjectionMatrix();
+    this.ship.invertY = s.invertY;
+    this.audio.setVolumes(s.masterVolume, s.sfxVolume, s.musicVolume);
+    this.hud.showTelemetry = s.showTelemetry;
+  }
+
+  /** Mouse captured → fly; released mid-mission → pause menu. */
+  private onLockChange(): void {
+    if (this.input.locked) {
+      this.started = true;
+      this.menu.hide();
+      this.accumulator = 0;
+      return;
+    }
+    if (this.objective.over) return;
+    this.menu.show(this.started ? 'pause' : 'main');
+  }
+
   start(): void {
     requestAnimationFrame((t) => {
       this.lastTime = t;
@@ -181,7 +225,8 @@ export class Game {
     const locked = this.input.locked;
     if (locked && this.endTimer < END_DELAY) {
       const { dx, dy } = this.input.consumeMouse();
-      if (this.player.alive) this.ship.applyMouse(dx, dy);
+      const k = this.settings.data.mouseSensitivity;
+      if (this.player.alive) this.ship.applyMouse(dx * k, dy * k);
       this.accumulator += dt;
       const controls = this.player.alive ? this.input.controls() : IDLE_CONTROLS;
       while (this.accumulator >= STEP) {
@@ -192,6 +237,7 @@ export class Game {
     }
 
     this.syncCamera(this.accumulator / STEP);
+    this.updateAudio(locked);
     for (const r of this.robots) if (r.alive) r.syncObject(this.accumulator / STEP);
     this.cull();
     this.projectileRenderer.sync(this.projectiles.projectiles);
@@ -214,6 +260,15 @@ export class Game {
     });
     requestAnimationFrame(this.frame);
   };
+
+  private updateAudio(active: boolean): void {
+    const a = this.audio;
+    a.setListener(this.camera.position, this.camera.quaternion);
+    const flying = active && this.player.alive && !this.objective.over;
+    a.setEngine(flying ? this.ship.velocity.length() + 1 : 0, flying && this.input.controls().boost);
+    const o = this.objective;
+    a.setAlarm(active && o.state === 'escape', 1 - o.timeLeft / Math.max(1, o.countdown));
+  }
 
   /** Fixed-rate simulation: movement, weapons, projectiles. */
   private simulate(dt: number, controls: FlightControls): void {
@@ -238,9 +293,19 @@ export class Game {
 
     if (this.player.damageTaken > 0) {
       this.hud.flashImpact(10 + this.player.damageTaken);
+      this.audio.play('hit');
       this.player.damageTaken = 0;
     }
-    if (this.ship.lastImpact > 8) this.hud.flashImpact(this.ship.lastImpact);
+    if (this.ship.lastImpact > 8) {
+      this.hud.flashImpact(this.ship.lastImpact);
+      this.audio.play('scrape', undefined, this.ship.lastImpact);
+    }
+    if (this.projectiles.playerHits > 0) {
+      this.hud.hitMarker();
+      this.audio.play('hitMarker');
+      this.projectiles.playerHits = 0;
+    }
+    this.updateMissileWarning(dt);
 
     for (const door of this.doors) {
       const key = door.key;
@@ -249,6 +314,8 @@ export class Game {
         ? this.objective.state === 'escape'
         : key === null || this.player.keys.has(key);
       const event = door.update(dt, pos, r, unlocked, blocked);
+      if (event === 'locked') this.audio.play('locked', door.state.center);
+      if (event === 'opened') this.audio.play('doorOpen', door.state.center);
       if (event === 'locked' && door.state.exit) this.notify('EXIT SEALED — DESTROY THE REACTOR', '#ff2a4d');
       else if (event === 'locked' && key) this.notify(`${key.toUpperCase()} KEY REQUIRED`, keyCss(key));
       if (event === 'opened' && door.state.exit) this.hud.message('EXIT OPEN — GO!', '#00e5ff');
@@ -259,9 +326,11 @@ export class Game {
       if (p.type.kind === 'key') {
         this.player.keys.add(p.type.color);
         p.collect();
+        this.audio.play('key');
         this.hud.message(`${p.type.color.toUpperCase()} KEY ACQUIRED`, keyCss(p.type.color));
       } else if (this.player.collect(p.type.kind)) {
         p.collect();
+        this.audio.play('pickup');
         this.hud.message(`${p.type.kind.toUpperCase()} BOOST`);
       }
     }
@@ -305,6 +374,14 @@ export class Game {
       this.effects.explosion(this.ship.position, 3, 0xffa31a);
       this.shake = 3;
     }
+    if (o.state === 'escape' && o.timeLeft < 10) {
+      // Countdown beeps for the last ten seconds, higher for the last five.
+      const second = Math.ceil(o.timeLeft);
+      if (second !== this.lastBeep) {
+        this.lastBeep = second;
+        this.audio.play('beep', undefined, second <= 5 ? 1.5 : 1);
+      }
+    }
     if (o.state === 'escape') {
       const urgency = 1 - o.timeLeft / Math.max(1, o.countdown);
       this.alarmLight.intensity = (0.25 + 0.35 * urgency) * (0.5 + 0.5 * Math.sin(o.elapsed * 6));
@@ -318,6 +395,7 @@ export class Game {
     if (this.endTimer < 0) this.endTimer = 0;
     const before = this.endTimer;
     this.endTimer += dt;
+    if (before === 0) this.audio.play(o.state === 'won' ? 'win' : 'lose');
     if (before < END_DELAY && this.endTimer >= END_DELAY) this.showEndScreen();
   }
 
@@ -341,7 +419,7 @@ export class Game {
         ['SHIPS LOST', String(o.deaths)],
       ],
     }, () => window.location.reload());
-    this.input.lockEnabled = false;
+    this.menu.hide();
     if (document.pointerLockElement) document.exitPointerLock();
   }
 
@@ -363,6 +441,19 @@ export class Game {
       this.player.respawn();
       this.respawnTimer = 0;
       this.hud.message('SHIP RECONSTRUCTED');
+    }
+  }
+
+  /** Warns when an enemy missile is homing in on the ship. */
+  private updateMissileWarning(dt: number): void {
+    const incoming = this.projectiles.projectiles.some(
+      (p) => p.kind === 'missile' && p.faction === 'enemy' && p.target === this.player,
+    );
+    this.hud.missileWarning(incoming);
+    this.warningTimer -= dt;
+    if (incoming && this.warningTimer <= 0) {
+      this.audio.play('warning');
+      this.warningTimer = 0.45;
     }
   }
 
