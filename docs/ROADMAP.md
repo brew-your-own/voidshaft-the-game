@@ -27,7 +27,7 @@ _Status as of 2026-11-21: all 8 milestones are done, on `master`. The vertical s
 | 5 | Robots and AI | ✅ Done | `db25389` |
 | 6 | Objective loop: reactor, countdown, escape | ✅ Done | `2a42b42` |
 | 7 | HUD, audio, menus, settings | ✅ Done | `6766f7b` |
-| 8 | Polish: performance, automap | ✅ Done | _uncommitted_ |
+| 8 | Polish: performance, automap | ✅ Done | `4e47e0f` |
 
 ### What each milestone delivered
 
