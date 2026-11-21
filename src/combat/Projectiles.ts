@@ -37,6 +37,13 @@ export interface Projectile {
   life: number;
   target: Damageable | null;
   retarget: number;
+  /** Multiplier on the kind's damage (robots fire weaker shots). */
+  damageScale: number;
+}
+
+export interface SpawnOptions {
+  speed?: number;
+  damageScale?: number;
 }
 
 const _next = new Vector3();
@@ -55,8 +62,11 @@ export class ProjectileSystem {
     private readonly damageables: () => readonly Damageable[],
   ) {}
 
-  spawn(kind: ProjectileKind, faction: Faction, position: Vector3, direction: Vector3, segment: number): Projectile {
-    const speed = WEAPON_TUNING[kind].speed;
+  spawn(
+    kind: ProjectileKind, faction: Faction, position: Vector3, direction: Vector3, segment: number,
+    opts: SpawnOptions = {},
+  ): Projectile {
+    const speed = opts.speed ?? WEAPON_TUNING[kind].speed;
     const p: Projectile = {
       kind, faction,
       position: position.clone(),
@@ -65,6 +75,7 @@ export class ProjectileSystem {
       life: WEAPON_TUNING[kind].life,
       target: null,
       retarget: 0,
+      damageScale: opts.damageScale ?? 1,
     };
     this.projectiles.push(p);
     return p;
@@ -107,7 +118,7 @@ export class ProjectileSystem {
       if (p.kind === 'missile') {
         this.detonate(p, _hit, victim);
       } else {
-        victim?.damage(WEAPON_TUNING.laser.damage, _hit);
+        victim?.damage(WEAPON_TUNING.laser.damage * p.damageScale, _hit);
         this.effects.impact(_hit, _normal, PROJECTILE_COLORS[p.faction]);
       }
       return false;
@@ -168,15 +179,26 @@ export class ProjectileSystem {
 
   private detonate(p: Projectile, at: Vector3, direct: Damageable | null): void {
     const cfg = WEAPON_TUNING.missile;
-    this.effects.explosion(at, 1.4, PROJECTILE_COLORS[p.faction]);
-    direct?.damage(cfg.damage, at);
+    direct?.damage(cfg.damage * p.damageScale, at);
+    this.explode(at, p.faction, cfg.splashDamage * p.damageScale, cfg.splashRadius, 1.4, PROJECTILE_COLORS[p.faction], p.segment);
+  }
+
+  /**
+   * Splash damage with linear falloff from the hull, blocked by walls and
+   * closed doors. The `faction`'s own side takes a reduced share.
+   */
+  explode(at: Vector3, faction: Faction, damage: number, radius: number, size: number, color: number, segment = -1): void {
+    const cfg = WEAPON_TUNING.missile;
+    this.effects.explosion(at, size, color);
+    const seg = segment >= 0 ? segment : this.level.findSegment(at);
     for (const d of this.damageables()) {
       if (!d.alive) continue;
       const dist = d.position.distanceTo(at) - d.radius;
-      if (dist >= cfg.splashRadius) continue;
-      const falloff = 1 - Math.max(0, dist) / cfg.splashRadius;
-      const factor = d.faction === p.faction ? cfg.selfSplashFactor : 1;
-      d.damage(cfg.splashDamage * falloff * factor, at);
+      if (dist >= radius) continue;
+      if (seg >= 0 && dist > 0 && !this.level.lineOfSight(at, seg, d.position)) continue;
+      const falloff = 1 - Math.max(0, dist) / radius;
+      const factor = d.faction === faction ? cfg.selfSplashFactor : 1;
+      d.damage(damage * falloff * factor, at);
     }
   }
 }

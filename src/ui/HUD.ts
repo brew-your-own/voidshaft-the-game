@@ -13,6 +13,7 @@ export interface HudState {
   energy: number;
   missiles: number;
   dead: boolean;
+  hostiles: number;
 }
 
 const KEY_SLOTS = (['blue', 'gold', 'red'] as const).map((color) => ({ color, css: keyCss(color) }));
@@ -88,7 +89,7 @@ export class HUD {
     this.missileValue.textContent = String(s.missiles).padStart(2, '0');
     KEY_SLOTS.forEach((k, i) => this.keySlots[i].classList.toggle('owned', s.keys.includes(k.color)));
     this.telemetry.textContent =
-      `${s.levelName}\nSPD ${s.speed.toFixed(1).padStart(5)}\nSEG ${String(s.segment).padStart(5)}\nVIS ${String(s.visibleSegments).padStart(5)}\nFPS ${String(Math.round(s.fps)).padStart(5)}`;
+      `${s.levelName}\nSPD ${s.speed.toFixed(1).padStart(5)}\nSEG ${String(s.segment).padStart(5)}\nVIS ${String(s.visibleSegments).padStart(5)}\nFPS ${String(Math.round(s.fps)).padStart(5)}\nHOS ${String(s.hostiles).padStart(5)}`;
   }
 
   /** Brief red flash when scraping a wall hard. */

@@ -2,7 +2,7 @@ import type { Vector3 } from 'three';
 
 export type Faction = 'player' | 'enemy';
 
-/** Anything projectiles can hit: targets now, robots later. */
+/** Anything projectiles can hit: the player, targets and robots. */
 export interface Damageable {
   readonly position: Vector3;
   readonly radius: number;

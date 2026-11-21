@@ -1,5 +1,5 @@
 import { SIDE_VERTS, OPPOSITE, partnerVertex } from './geometry';
-import type { LevelData } from './types';
+import { ROBOT_TYPES, type LevelData } from './types';
 
 /** Fetches a level exported by `npm run levels` and validates it. */
 export async function loadLevel(id: string): Promise<LevelData> {
@@ -41,7 +41,11 @@ export function validateLevel(data: LevelData): string[] {
     ...data.keys.map((k) => ({ what: `key ${k.color}`, segment: k.segment })),
     ...(data.pickups ?? []).map((p) => ({ what: `pickup ${p.kind}`, segment: p.segment })),
     ...(data.targets ?? []).map((t, i) => ({ what: `target ${i}`, segment: t.segment })),
+    ...(data.robots ?? []).map((r, i) => ({ what: `robot ${i}`, segment: r.segment })),
   ];
+  for (const [i, r] of (data.robots ?? []).entries()) {
+    if (!ROBOT_TYPES.includes(r.type)) errors.push(`robot ${i}: unknown type ${r.type}`);
+  }
   for (const t of things) {
     if (t.segment < 0 || t.segment >= nSeg) errors.push(`${t.what}: segment out of range`);
   }

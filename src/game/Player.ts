@@ -30,6 +30,10 @@ export class Player implements Damageable {
     return this.ship.position;
   }
 
+  get velocity(): Vector3 {
+    return this.ship.velocity;
+  }
+
   get segment(): number {
     return this.ship.segment;
   }

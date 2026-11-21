@@ -132,6 +132,40 @@ export class Level {
     return true;
   }
 
+  /** Centre of the face on `side` of `seg` (portal centre for open sides). */
+  sideCenter(seg: number, side: number, out = new Vector3()): Vector3 {
+    out.set(0, 0, 0);
+    for (const v of this.segments[seg].sides[side].quad) out.add(v);
+    return out.multiplyScalar(0.25);
+  }
+
+  /**
+   * Shortest portal path from `from` to `to` (BFS over the segment graph),
+   * including both ends. `passable(seg, side)` can veto portals (closed
+   * doors). Returns null when unreachable.
+   */
+  findPath(from: number, to: number, passable: (seg: number, side: number) => boolean = () => true): number[] | null {
+    if (from === to) return [from];
+    const prev = new Map<number, number>([[from, -1]]);
+    const queue = [from];
+    for (let qi = 0; qi < queue.length; qi++) {
+      const s = queue[qi];
+      const children = this.segments[s].children;
+      for (let side = 0; side < 6; side++) {
+        const c = children[side];
+        if (c < 0 || prev.has(c) || !passable(s, side)) continue;
+        prev.set(c, s);
+        if (c === to) {
+          const path = [c];
+          for (let p = s; p !== -1; p = prev.get(p)!) path.push(p);
+          return path.reverse();
+        }
+        queue.push(c);
+      }
+    }
+    return null;
+  }
+
   /** Smallest signed distance from p to the segment's side planes (>0 = inside). */
   containment(p: Vector3, seg: number): number {
     let min = Infinity;

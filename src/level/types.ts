@@ -49,8 +49,18 @@ export interface PickupData {
   position: Vec3;
 }
 
-/** Stationary destructible practice target (stand-in until robots exist). */
+/** Stationary destructible practice target (firing range). */
 export interface TargetData {
+  segment: number;
+  position: Vec3;
+}
+
+/** Robot archetypes; behaviour and tuning live in entities/robots. */
+export type RobotType = 'stinger' | 'bulwark' | 'fuse';
+export const ROBOT_TYPES: readonly RobotType[] = ['stinger', 'bulwark', 'fuse'];
+
+export interface RobotData {
+  type: RobotType;
   segment: number;
   position: Vec3;
 }
@@ -65,4 +75,5 @@ export interface LevelData {
   keys: KeyData[];
   pickups: PickupData[];
   targets: TargetData[];
+  robots: RobotData[];
 }

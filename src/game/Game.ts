@@ -5,12 +5,14 @@ import { ProjectileSystem } from '../combat/Projectiles';
 import type { Damageable } from '../combat/types';
 import { Door } from '../entities/Door';
 import { Pickup } from '../entities/Pickup';
+import { Robot, type RobotWorld } from '../entities/robots/Robot';
 import { Target } from '../entities/Target';
 import { GameEffects } from '../fx/GameEffects';
+import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
 import { Level } from '../level/Level';
 import { buildLevelMesh } from '../level/LevelMesh';
-import type { KeyColor, LevelData } from '../level/types';
+import type { KeyColor, LevelData, PickupKind } from '../level/types';
 import { Ship } from '../physics/Ship';
 import { keyCss } from '../render/palette';
 import { PortalCuller } from '../render/PortalCuller';
@@ -43,6 +45,7 @@ export class Game {
   private readonly doors: Door[];
   private readonly pickups: Pickup[];
   private readonly targets: Target[];
+  private readonly robots: Robot[] = [];
   private readonly culler: PortalCuller;
   private readonly effects = new GameEffects();
   private readonly projectiles: ProjectileSystem;
@@ -86,8 +89,19 @@ export class Game {
     for (const t of this.targets) this.segmentMeshes[t.segment].add(t.object);
     this.culler = new PortalCuller(this.level);
 
-    this.damageables.push(this.player, ...this.targets);
     this.projectiles = new ProjectileSystem(this.level, this.effects, () => this.damageables);
+    const world: RobotWorld = {
+      level: this.level,
+      projectiles: this.projectiles,
+      effects: this.effects,
+      player: this.player,
+      robots: this.robots,
+      rng: Math.random,
+      onDeath: (r) => this.onRobotDeath(r),
+    };
+    for (const r of levelData.robots ?? []) this.robots.push(new Robot(r.type, r, world));
+    for (const r of this.robots) this.scene.add(r.object);
+    this.damageables.push(this.player, ...this.targets, ...this.robots);
     this.weapons = new PlayerWeapons(this.player, this.level, this.projectiles, this.effects);
     this.scene.add(this.effects.object, this.projectileRenderer.object);
 
@@ -123,6 +137,10 @@ export class Game {
     return this.ship;
   }
 
+  get debugRobots(): Robot[] {
+    return this.robots;
+  }
+
   start(): void {
     requestAnimationFrame((t) => {
       this.lastTime = t;
@@ -149,6 +167,7 @@ export class Game {
     }
 
     this.syncCamera(this.accumulator / STEP);
+    for (const r of this.robots) if (r.alive) r.syncObject(this.accumulator / STEP);
     this.cull();
     this.projectileRenderer.sync(this.projectiles.projectiles);
     this.ctx.composer.render();
@@ -164,6 +183,7 @@ export class Game {
       energy: this.player.energy,
       missiles: this.player.missiles,
       dead: !this.player.alive,
+      hostiles: this.robots.reduce((n, r) => n + (r.alive ? 1 : 0), 0),
     });
     requestAnimationFrame(this.frame);
   };
@@ -176,6 +196,7 @@ export class Game {
       if (event === 'no-energy') this.notify('ENERGY DEPLETED', '#ffa31a');
       if (event === 'no-missiles') this.notify('NO MISSILES', '#ff2bd6');
     }
+    for (const r of this.robots) r.update(dt);
     this.projectiles.update(dt);
   }
 
@@ -193,7 +214,8 @@ export class Game {
 
     for (const door of this.doors) {
       const key = door.key;
-      const event = door.update(dt, pos, r, key === null || this.player.keys.has(key));
+      const blocked = this.robots.some((b) => b.alive && distanceToTris(b.position, door.state.tris) < b.radius + 0.35);
+      const event = door.update(dt, pos, r, key === null || this.player.keys.has(key), blocked);
       if (event === 'locked' && key) this.notify(`${key.toUpperCase()} KEY REQUIRED`, keyCss(key));
     }
     for (const p of this.pickups) {
@@ -230,6 +252,19 @@ export class Game {
     }
   }
 
+  /** Removes a destroyed robot and maybe leaves a powerup behind. */
+  private onRobotDeath(robot: Robot): void {
+    robot.object.removeFromParent();
+    const drop = robot.tuning.drop;
+    if (drop && Math.random() < drop.chance) this.spawnPickup(drop.kind, robot.position, robot.segment);
+  }
+
+  private spawnPickup(kind: PickupKind, at: { x: number; y: number; z: number }, segment: number): void {
+    const p = new Pickup({ kind }, [at.x, at.y, at.z], segment);
+    this.pickups.push(p);
+    this.segmentMeshes[segment].add(p.object);
+  }
+
   /** Rate-limited HUD message for repeated warnings. */
   private notify(text: string, color: string): void {
     if (this.messageCooldown > 0) return;
@@ -244,6 +279,7 @@ export class Game {
       return !door || door.openAmount > 0.01;
     });
     this.segmentMeshes.forEach((g, i) => { g.visible = visible[i]; });
+    for (const r of this.robots) r.object.visible = r.alive && visible[r.segment];
     for (const d of this.doors) {
       d.object.visible = (visible[d.state.segment] || visible[d.state.child]) && d.state.openAmount < 0.995;
     }

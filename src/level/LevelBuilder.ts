@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { BOX_SIGNS, OPPOSITE, SIDE_VERTS, partnerVertex } from './geometry';
 import type {
-  DoorData, KeyColor, KeyData, LevelData, LightData, PickupData, PickupKind, SegmentData, TargetData, Vec3,
+  DoorData, KeyColor, KeyData, LevelData, LightData, PickupData, PickupKind, RobotData, RobotType, SegmentData, TargetData, Vec3,
 } from './types';
 
 export interface ExtrudeOptions {
@@ -27,6 +27,7 @@ export class LevelBuilder {
   private readonly keys: KeyData[] = [];
   private readonly pickups: PickupData[] = [];
   private readonly targets: TargetData[] = [];
+  private readonly robots: RobotData[] = [];
 
   addBox(center: Vec3, size: Vec3, color: number): number {
     const verts = BOX_SIGNS.map(([sx, sy, sz]) =>
@@ -101,6 +102,11 @@ export class LevelBuilder {
     this.targets.push({ segment: seg, position: this.at(seg, offset) });
   }
 
+  /** Places a robot at the segment centre (plus offset). */
+  robot(seg: number, type: RobotType, offset: Vec3 = [0, 0, 0]): void {
+    this.robots.push({ type, segment: seg, position: this.at(seg, offset) });
+  }
+
   /** Places a key pickup at the segment centre (plus offset). */
   key(seg: number, color: KeyColor, offset: Vec3 = [0, 0, 0]): void {
     this.keys.push({ color, segment: seg, position: this.at(seg, offset) });
@@ -129,6 +135,7 @@ export class LevelBuilder {
       keys: [...this.keys],
       pickups: [...this.pickups],
       targets: [...this.targets],
+      robots: [...this.robots],
     };
   }
 

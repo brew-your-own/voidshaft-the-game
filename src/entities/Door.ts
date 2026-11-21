@@ -53,9 +53,10 @@ export class Door {
 
   /**
    * Advances the door. `shipPos`/`radius` describe the player ship and
-   * `hasKey` whether it carries this door's key.
+   * `hasKey` whether it carries this door's key. `blocked` keeps an open
+   * door from closing on something else in the doorway (robots).
    */
-  update(dt: number, shipPos: Vector3, radius: number, hasKey: boolean): DoorEvent {
+  update(dt: number, shipPos: Vector3, radius: number, hasKey: boolean, blocked = false): DoorEvent {
     const s = this.state;
     const dist = distanceToTris(shipPos, s.tris);
     const near = dist < DOOR_TUNING.triggerDistance;
@@ -77,11 +78,11 @@ export class Door {
       case 'open':
         if (near) this.hold = DOOR_TUNING.holdTime;
         else this.hold -= dt;
-        if (this.hold <= 0 && !overlapping) this.phase = 'closing';
+        if (this.hold <= 0 && !overlapping && !blocked) this.phase = 'closing';
         break;
       case 'closing':
         // Never close on the ship: re-open instead.
-        if (overlapping || (near && (s.key === null || hasKey))) { this.phase = 'opening'; break; }
+        if (overlapping || blocked || (near && (s.key === null || hasKey))) { this.phase = 'opening'; break; }
         s.openAmount = Math.max(0, s.openAmount - speed);
         if (s.openAmount <= 0) this.phase = 'closed';
         break;

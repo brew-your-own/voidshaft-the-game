@@ -23,7 +23,7 @@ export function buildLevel01(): LevelData {
   let s = b.extrude(hangar, SIDE.FRONT, { length: 6, scale: 0.6, color: magenta });
   s = b.tunnel(s, SIDE.FRONT, [{ length: 10 }, { length: 8, shift: [0, 4, 0] }, { length: 6 }]);
   b.addLight(s, magenta, 30, 25);
-  b.target(s);
+  b.robot(s, 'stinger');
 
   // Right turn into an amber service duct that snakes a little.
   const ductStart = b.extrude(s, SIDE.RIGHT, { length: 8, color: amber });
@@ -35,13 +35,15 @@ export function buildLevel01(): LevelData {
   ]);
   b.addLight(duct, amber, 30, 25);
   b.pickup(duct, 'energy');
-  b.target(ductStart);
+  b.robot(ductStart, 'fuse');
+  b.robot(duct, 'stinger', [0, 0, 1]);
 
   // Vertical shaft, behind a red door.
   let shaft = b.extrude(duct, SIDE.TOP, { length: 8, color: lime });
   b.door(duct, SIDE.TOP, 'red');
   shaft = b.tunnel(shaft, SIDE.TOP, [{ length: 10, scale: 1.1 }, { length: 10 }]);
   b.addLight(shaft, lime, 30, 25);
+  b.robot(shaft, 'fuse');
 
   // Hub chamber: flare out, big room, narrow back down.
   const flare = b.extrude(shaft, SIDE.TOP, { length: 4, scale: 2.4, color: violet });
@@ -49,9 +51,9 @@ export function buildLevel01(): LevelData {
   const cap = b.extrude(hub, SIDE.TOP, { length: 4, scale: 0.45 });
   b.addLight(hub, violet, 90, 40);
   b.addLight(cap, cyan, 20, 15);
-  b.target(hub, [-4, 2, 0]);
-  b.target(hub, [4, -2, 3]);
-  b.target(hub, [0, 4, -4]);
+  b.robot(hub, 'bulwark', [0, 2, 0]);
+  b.robot(hub, 'stinger', [-5, 3, 2]);
+  b.robot(hub, 'stinger', [5, -2, -3]);
   b.pickup(hub, 'shield', [0, -5, 0]);
   b.pickup(cap, 'missiles');
 
@@ -61,12 +63,15 @@ export function buildLevel01(): LevelData {
   const west = b.tunnel(westNeck, SIDE.LEFT, [{ length: 10, shift: [0, -3, 0] }, { length: 10 }]);
   b.door(westNeck, SIDE.LEFT, 'gold');
   b.addLight(west, red, 30, 25);
+  b.robot(west, 'bulwark');
+  b.robot(west, 'fuse', [3, 0, 0]);
   const vault = b.tunnel(hub, SIDE.BACK, [
     { length: 6, scale: 0.35, color: cyan },
     { length: 12, scale: 0.8 },
     { length: 8, shift: [4, 0, 0] },
   ]);
   b.key(vault, 'gold');
+  b.robot(vault, 'stinger', [0, 1, 2]);
   b.pickup(vault, 'missiles', [0, 0, -2]);
 
   // Side tunnel from the hangar: low, twisting crawlspace.
@@ -79,6 +84,7 @@ export function buildLevel01(): LevelData {
   b.door(crawlNeck, SIDE.LEFT);
   b.addLight(crawl, amber, 25, 20);
   b.key(crawl, 'red');
+  b.robot(crawl, 'stinger', [0, 1, 0]);
   b.pickup(crawl, 'energy', [0, -1, 2]);
   b.pickup(crawl, 'shield', [0, -1, -2]);
 
