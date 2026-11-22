@@ -31,7 +31,7 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 | 9 | Level selector and map viewer | ✅ Done | `41d51bc` |
 | 10 | Five bigger levels | ✅ Done | `5bffdc9` |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
-| 12 | Juice: escape sequence, wall detail, explosions, heavier sound | ✅ Done | (this commit) |
+| 12 | Juice: escape sequence, wall detail, explosions, heavier sound | ✅ Done | `1faabf5` |
 
 ### What each milestone delivered
 
