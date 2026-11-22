@@ -3,7 +3,7 @@ import { Quaternion, Vector3 } from 'three';
 export type SoundName =
   | 'laser' | 'enemyLaser' | 'missile' | 'enemyMissile' | 'explosion' | 'impact' | 'hit' | 'hitMarker'
   | 'scrape' | 'shieldHit' | 'pickup' | 'key' | 'doorOpen' | 'locked' | 'alert' | 'beep' | 'warning'
-  | 'uiClick' | 'win' | 'lose';
+  | 'uiClick' | 'win' | 'lose' | 'klaxon' | 'countdown';
 
 /** Sound sink used by game logic; NO_SOUND keeps tests silent. */
 export interface SoundSink {
@@ -11,6 +11,24 @@ export interface SoundSink {
 }
 
 export const NO_SOUND: SoundSink = { play() {} };
+
+/** Effects-bus mix: a low-shelf bass boost and a reverb send. */
+export interface AudioMix {
+  /** Low-shelf gain in dB below `bassFreq`. */
+  bassDb: number;
+  bassFreq: number;
+  /** Reverb send level, 0..1. */
+  reverb: number;
+  /** Reverb tail length in seconds. */
+  reverbDecay: number;
+}
+
+export const AUDIO_TUNING: AudioMix = {
+  bassDb: 4,
+  bassFreq: 120,
+  reverb: 0.3,
+  reverbDecay: 1.8,
+};
 
 const _dir = new Vector3();
 const _right = new Vector3();
@@ -37,6 +55,13 @@ export class AudioEngine implements SoundSink {
   private readonly listenerQuat = new Quaternion();
   /** Per-sound timestamps to avoid stacking identical sounds in one frame. */
   private readonly lastPlayed = new Map<SoundName, number>();
+  private bassShelf!: BiquadFilterNode;
+  private reverbSend!: GainNode;
+  private convolver!: ConvolverNode;
+  private mix: AudioMix = { ...AUDIO_TUNING };
+  private builtDecay = -1;
+  /** Replacement recipes, used by the sound lab to audition variants. */
+  readonly overrides: Partial<Record<SoundName, Recipe>> = {};
 
   /** Call from a click handler: creates or resumes the audio context. */
   unlock(): void {
@@ -64,6 +89,41 @@ export class AudioEngine implements SoundSink {
     this.music.gain.setTargetAtTime(music * 0.6, t, 0.05);
   }
 
+  setMix(mix: Partial<AudioMix>): void {
+    this.mix = { ...this.mix, ...mix };
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.bassShelf.gain.setTargetAtTime(this.mix.bassDb, t, 0.05);
+    this.bassShelf.frequency.setTargetAtTime(this.mix.bassFreq, t, 0.05);
+    this.reverbSend.gain.setTargetAtTime(this.mix.reverb, t, 0.05);
+    if (Math.abs(this.mix.reverbDecay - this.builtDecay) > 0.01) this.buildReverb();
+  }
+
+  get currentMix(): AudioMix {
+    return { ...this.mix };
+  }
+
+  /** Synthetic hall: stereo noise with an exponential tail, darker as it fades. */
+  private buildReverb(): void {
+    const ctx = this.ctx!;
+    const decay = this.mix.reverbDecay;
+    const len = Math.ceil(ctx.sampleRate * decay);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const p = i / len;
+        // One-pole low-pass that closes over the tail: highs die first.
+        const k = 0.9 - 0.85 * p;
+        lp += k * ((Math.random() * 2 - 1) - lp);
+        d[i] = lp * Math.exp(-6.9 * p) * (i < ctx.sampleRate * 0.008 ? 0 : 1);
+      }
+    }
+    this.convolver.buffer = ir;
+    this.builtDecay = decay;
+  }
+
   setListener(pos: Vector3, quat: Quaternion): void {
     this.listener.copy(pos);
     this.listenerQuat.copy(quat);
@@ -84,7 +144,8 @@ export class AudioEngine implements SoundSink {
   setAlarm(on: boolean, urgency = 0): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.alarmGain.gain.setTargetAtTime(on ? 0.05 + 0.05 * urgency : 0, t, 0.2);
+    // Kept under the escape klaxon blasts, which carry the alarm.
+    this.alarmGain.gain.setTargetAtTime(on ? 0.03 + 0.04 * urgency : 0, t, 0.2);
     this.alarmOsc.frequency.setTargetAtTime(0.8 + 2.2 * urgency, t, 0.5);
     // The ambient pad darkens and tightens during the escape.
     this.padFilter.frequency.setTargetAtTime(on ? 300 : 700, t, 1);
@@ -115,7 +176,7 @@ export class AudioEngine implements SoundSink {
     const panner = ctx.createStereoPanner();
     panner.pan.value = pan;
     out.connect(panner).connect(this.sfx);
-    RECIPES[name](this, out, now, scale);
+    (this.overrides[name] ?? RECIPES[name])(this, out, now, scale);
   }
 
   // -------------------------------------------------------------- primitives
@@ -155,6 +216,60 @@ export class AudioEngine implements SoundSink {
     src.stop(t + dur + 0.05);
   }
 
+  /**
+   * Voice-like tone: a buzzy saw at pitch `f` through two band-pass
+   * formants (vowel resonances), gliding from formants `v0` to `v1`.
+   */
+  formant(out: AudioNode, t: number, f: number, dur: number, vol: number, v0: [number, number], v1: [number, number]): void {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.linearRampToValueAtTime(f * 0.94, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.setValueAtTime(vol, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.connect(out);
+    for (let i = 0; i < 2; i++) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 8;
+      bp.frequency.setValueAtTime(v0[i], t);
+      bp.frequency.linearRampToValueAtTime(v1[i], t + dur);
+      o.connect(bp).connect(g);
+    }
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  /**
+   * Soft-clipping distortion feeding `out`: connect layers to the returned
+   * node to make them grittier and louder-sounding. Curves are cached by drive.
+   */
+  drive(out: AudioNode, amount: number, t: number, dur: number): AudioNode {
+    const ctx = this.ctx!;
+    let curve = this.curves.get(amount);
+    if (!curve) {
+      curve = new Float32Array(1024);
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i / (curve.length - 1)) * 2 - 1;
+        curve[i] = Math.tanh(x * amount) / Math.tanh(amount);
+      }
+      this.curves.set(amount, curve);
+    }
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = curve;
+    shaper.oversample = '2x';
+    shaper.connect(out);
+    // Disconnect once the sound is over so shapers don't pile up.
+    setTimeout(() => shaper.disconnect(), (dur + 0.2) * 1000 + Math.max(0, t - ctx.currentTime) * 1000);
+    return shaper;
+  }
+
+  private readonly curves = new Map<number, Float32Array<ArrayBuffer>>();
+
   private build(): void {
     const ctx = this.ctx!;
     this.master = ctx.createGain();
@@ -165,7 +280,18 @@ export class AudioEngine implements SoundSink {
     comp.ratio.value = 6;
     comp.connect(this.master);
     this.sfx = ctx.createGain();
-    this.sfx.connect(comp);
+    // Effects bus: bass shelf, then dry to the limiter plus a reverb send.
+    this.bassShelf = ctx.createBiquadFilter();
+    this.bassShelf.type = 'lowshelf';
+    this.sfx.connect(this.bassShelf).connect(comp);
+    this.convolver = ctx.createConvolver();
+    this.reverbSend = ctx.createGain();
+    const wetTone = ctx.createBiquadFilter();
+    wetTone.type = 'lowpass';
+    wetTone.frequency.value = 5000;
+    this.bassShelf.connect(this.reverbSend).connect(this.convolver).connect(wetTone).connect(comp);
+    this.builtDecay = -1;
+    this.setMix({});
     this.music = ctx.createGain();
     this.music.connect(comp);
     this.setVolumes(this.volumes.master, this.volumes.sfx, this.volumes.music);
@@ -234,15 +360,21 @@ export class AudioEngine implements SoundSink {
   }
 }
 
-type Recipe = (a: AudioEngine, out: AudioNode, t: number, scale: number) => void;
+export type Recipe = (a: AudioEngine, out: AudioNode, t: number, scale: number) => void;
 
 const arpeggio = (a: AudioEngine, out: AudioNode, t: number, notes: number[], step: number, vol: number, type: OscillatorType = 'triangle') =>
   notes.forEach((f, i) => a.tone(out, t + i * step, type, f, f, step * 2.2, vol));
 
-const RECIPES: Record<SoundName, Recipe> = {
+export const RECIPES: Record<SoundName, Recipe> = {
+  // Pulse blaster: two quick hammer pulses per shot over a punchy sub.
   laser: (a, o, t) => {
-    a.tone(o, t, 'square', 1500, 260, 0.13, 0.12);
-    a.tone(o, t, 'sine', 2600, 900, 0.08, 0.08);
+    const d = a.drive(o, 5, t, 0.3);
+    for (const dt of [0, 0.045]) {
+      a.tone(d, t + dt, 'square', 900, 160, 0.07, 0.22, 0.001);
+      a.noiseBurst(o, t + dt, 'bandpass', 2200, 500, 0.05, 0.3, 1.5);
+    }
+    a.tone(o, t, 'sine', 140, 42, 0.22, 0.85, 0.002);
+    a.tone(o, t, 'sine', 70, 30, 0.25, 0.5, 0.004);
   },
   enemyLaser: (a, o, t) => {
     a.tone(o, t, 'sawtooth', 800, 140, 0.2, 0.14);
@@ -255,17 +387,29 @@ const RECIPES: Record<SoundName, Recipe> = {
     a.noiseBurst(o, t, 'bandpass', 300, 1500, 0.5, 0.45, 3);
     a.tone(o, t, 'sawtooth', 90, 45, 0.45, 0.15);
   },
+  // Thunder: two stacked booms and a long low roll; scale = size (1 small robot, 3 reactor).
   explosion: (a, o, t, s) => {
-    const dur = 0.6 + 0.5 * s;
-    a.noiseBurst(o, t, 'lowpass', 2200, 80, dur, Math.min(1, 0.5 + 0.3 * s));
-    a.tone(o, t, 'sine', 110, 28, dur * 0.8, Math.min(0.9, 0.4 + 0.25 * s), 0.01);
+    const dur = 1 + 0.6 * s;
+    const k = Math.min(1, 0.6 + 0.2 * s);
+    a.tone(o, t, 'sine', 100, 22, dur * 0.7, 0.85 * k, 0.003);
+    a.tone(o, t + 0.09, 'sine', 70, 18, dur, 0.85 * k, 0.005);
+    a.noiseBurst(o, t, 'lowpass', 2500, 60, dur * 0.6, 0.7 * k);
+    a.noiseBurst(o, t + 0.05, 'lowpass', 600, 25, dur * 2.2, 0.75 * k, 3);
   },
   impact: (a, o, t) => {
     a.noiseBurst(o, t, 'highpass', 3000, 1500, 0.06, 0.18);
   },
-  hit: (a, o, t) => {
-    a.tone(o, t, 'sine', 200, 55, 0.25, 0.5);
-    a.noiseBurst(o, t, 'lowpass', 1500, 200, 0.18, 0.35);
+  // Player takes damage; scale = severity 0..1. The hull rings like struck
+  // metal over a heavy thud, longer and louder for bigger hits.
+  hit: (a, o, t, s) => {
+    const k = 0.6 + 0.4 * Math.min(1, s);
+    const dur = 0.6 + 0.5 * s;
+    const d = a.drive(o, 4, t, dur);
+    for (const [f, v] of [[312, 0.14], [471, 0.1], [729, 0.08], [1063, 0.06], [1540, 0.04]]) {
+      a.tone(o, t, 'sine', f, f * 0.97, dur, v * k, 0.001);
+    }
+    a.tone(o, t, 'sine', 95, 26, dur, 0.9 * k, 0.003);
+    a.noiseBurst(d, t, 'bandpass', 2000, 400, 0.1, 0.4 * k, 1.5);
   },
   hitMarker: (a, o, t) => {
     a.tone(o, t, 'square', 2400, 2400, 0.03, 0.04);
@@ -299,4 +443,18 @@ const RECIPES: Record<SoundName, Recipe> = {
   uiClick: (a, o, t) => a.tone(o, t, 'sine', 1600, 1200, 0.04, 0.08),
   win: (a, o, t) => arpeggio(a, o, t, [392, 494, 587, 784, 988, 1175], 0.12, 0.16),
   lose: (a, o, t) => arpeggio(a, o, t, [440, 392, 330, 262, 196], 0.18, 0.18, 'sawtooth'),
+  // Escape klaxon blast; scale = urgency 0..1 (higher, harsher, louder).
+  klaxon: (a, o, t, u) => {
+    const lo = 330 + 90 * u;
+    const dur = 0.55 - 0.15 * u;
+    a.tone(o, t, 'square', lo, lo * 1.5, dur * 0.5, 0.07 + 0.05 * u, 0.02);
+    a.tone(o, t + dur * 0.5, 'square', lo * 1.5, lo * 1.45, dur * 0.5, 0.07 + 0.05 * u, 0.01);
+    a.tone(o, t, 'sawtooth', lo * 0.5, lo * 0.74, dur, 0.05 + 0.04 * u, 0.02);
+  },
+  // Countdown call for the last ten seconds; scale = seconds left (pitch rises as it drops).
+  countdown: (a, o, t, s) => {
+    const f = 140 * (1 + (10 - Math.min(10, s)) * 0.07);
+    a.formant(o, t, f, 0.28, 0.5, [700, 1200], [400, 2200]);
+    a.tone(o, t, 'sine', 1800 + 60 * (10 - s), 1800 + 60 * (10 - s), 0.06, s <= 3 ? 0.14 : 0.08);
+  },
 };

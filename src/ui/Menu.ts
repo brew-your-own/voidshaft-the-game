@@ -40,8 +40,9 @@ const SLIDERS: Slider[] = [
   { key: 'musicVolume', label: 'Music volume', min: 0, max: 1, step: 0.05, format: pct },
 ];
 
-const TOGGLES: { key: 'invertY' | 'showTelemetry' | 'adaptiveResolution'; label: string }[] = [
+const TOGGLES: { key: 'invertY' | 'showTelemetry' | 'adaptiveResolution' | 'screenShake'; label: string }[] = [
   { key: 'invertY', label: 'Invert mouse Y' },
+  { key: 'screenShake', label: 'Screen shake' },
   { key: 'adaptiveResolution', label: 'Lower resolution when slow' },
   { key: 'showTelemetry', label: 'Show telemetry (FPS, draw calls)' },
 ];

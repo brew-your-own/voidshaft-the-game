@@ -1,4 +1,4 @@
-import { Group, PointLight, Vector3 } from 'three';
+import { Color, Group, PointLight, Vector3 } from 'three';
 import type { LightData } from '../level/types';
 
 export const STATIC_LIGHT_TUNING = {
@@ -23,6 +23,7 @@ interface Slot {
 }
 
 const _v = new Vector3();
+const _c = new Color();
 
 /**
  * Shows a big level's fixed lights through a constant number of point
@@ -36,6 +37,12 @@ export class StaticLights {
   readonly object = new Group();
   private readonly slots: Slot[];
   private readonly positions: Vector3[];
+  private readonly baseColors: Color[];
+  /** Alarm override (escape sequence): colour blended in by `tintAmount`. */
+  private readonly tintColor = new Color();
+  private tintAmount = 0;
+  /** Intensity multipliers for even / odd slots, so they can strobe in anti-phase. */
+  private readonly scales: [number, number] = [1, 1];
 
   constructor(
     private readonly lights: readonly LightData[],
@@ -43,6 +50,7 @@ export class StaticLights {
     slots = STATIC_LIGHT_TUNING.slots,
   ) {
     this.positions = lights.map((l) => new Vector3(...l.position));
+    this.baseColors = lights.map((l) => new Color(l.color));
     this.slots = Array.from({ length: slots }, () => {
       const light = new PointLight(0xffffff, 0, 1, STATIC_LIGHT_TUNING.decay);
       this.object.add(light);
@@ -59,10 +67,36 @@ export class StaticLights {
     return this.slots.filter((s) => s.source >= 0).map((s) => s.source);
   }
 
-  /** Picks the lights to show from `eye` and advances the fades. */
+  /** The point lights, in slot order (for tests and debugging). */
+  get pointLights(): PointLight[] {
+    return this.slots.map((s) => s.light);
+  }
+
+  /**
+   * Alarm override: blends every light toward `color` by `amount` (0 = the
+   * level's own colours) and scales even / odd slots' intensity. Only colour
+   * and intensity change, never the light count. Applied on the next update.
+   */
+  setAlarm(color: Color, amount: number, evenScale = 1, oddScale = evenScale): void {
+    this.tintColor.copy(color);
+    this.tintAmount = amount;
+    this.scales[0] = evenScale;
+    this.scales[1] = oddScale;
+  }
+
+  /** Picks the lights to show from `eye`, advances the fades and applies the alarm override. */
   update(dt: number, eye: Vector3): void {
+    if (this.lights.length > this.slots.length) this.select(dt, eye);
+    this.slots.forEach((s, i) => {
+      if (s.source < 0) return;
+      s.light.intensity = this.lights[s.source].intensity * this.scale * Math.max(0, s.level) * this.scales[i & 1];
+      const base = this.baseColors[s.source];
+      s.light.color.copy(this.tintAmount > 0 ? _c.copy(base).lerp(this.tintColor, this.tintAmount) : base);
+    });
+  }
+
+  private select(dt: number, eye: Vector3): void {
     const n = this.slots.length;
-    if (this.lights.length <= n) return;
     const current = new Set(this.slots.map((s) => s.source));
     const ranked = this.lights
       .map((l, i) => ({ i, score: _v.copy(this.positions[i]).distanceTo(eye) - l.distance - (current.has(i) ? STATIC_LIGHT_TUNING.stickiness : 0) }))
@@ -90,7 +124,6 @@ export class StaticLights {
       } else if (s.source >= 0 && s.level < 1) {
         s.level = Math.min(1, s.level + step);
       }
-      if (s.source >= 0) s.light.intensity = this.lights[s.source].intensity * this.scale * Math.max(0, s.level);
     }
   }
 

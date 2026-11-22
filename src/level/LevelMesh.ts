@@ -2,8 +2,10 @@ import { Color, Group, Mesh, Vector3 } from 'three';
 import { GeometrySink, mulberry32 } from '../render/GeometrySink';
 import { createLedMaterial, createWallMaterial } from '../render/Materials';
 import { PALETTE } from '../render/palette';
+import { WALL_DETAIL_TUNING, WALL_KIND } from '../render/WallDetail';
 import { bilerp } from './geometry';
 import type { Level, Segment } from './Level';
+import { doorEdges, hazardEdge, panelPlates, WallSink } from './wallPanels';
 
 const PANEL_SIZE = 2.6;
 const PANEL_INSET = 0.1; // fraction of panel size used for the bevel
@@ -21,6 +23,8 @@ export interface LevelMeshes {
 /** Builds the render meshes for all walls: bevelled panels plus LED strips. */
 export function buildLevelMesh(level: Level): LevelMeshes {
   const rng = mulberry32(1337);
+  // Separate stream so the detail seeds don't change the panel shades and LED dots.
+  const detailRng = mulberry32(4242);
   const base = new Color(PALETTE.wall);
   const white = new Color(PALETTE.white);
   const wallMaterial = createWallMaterial();
@@ -29,12 +33,14 @@ export function buildLevelMesh(level: Level): LevelMeshes {
   root.name = 'level';
 
   const segments = level.segments.map((seg) => {
-    const walls = new GeometrySink();
+    const walls = new WallSink();
     const leds = new GeometrySink();
     const accent = new Color(seg.color);
-    for (const side of seg.sides) {
-      if (side.isWall) buildWall(seg, side.quad, walls, leds, rng, base, accent, white);
-    }
+    seg.sides.forEach((side, s) => {
+      if (!side.isWall) return;
+      const wall: WallContext = { walls, leds, rng, detailRng, base, accent, white, doorEdges: doorEdges(level, seg.index, s) };
+      buildWall(seg, side.quad, wall);
+    });
     const group = new Group();
     group.name = `segment-${seg.index}`;
     if (walls.pos.length) group.add(new Mesh(walls.toGeometry(true), wallMaterial));
@@ -45,10 +51,20 @@ export function buildLevelMesh(level: Level): LevelMeshes {
   return { root, segments };
 }
 
-function buildWall(
-  seg: Segment, q: Vector3[], walls: GeometrySink, leds: GeometrySink,
-  rng: () => number, base: Color, accent: Color, white: Color,
-): void {
+interface WallContext {
+  walls: WallSink;
+  leds: GeometrySink;
+  rng: () => number;
+  detailRng: () => number;
+  base: Color;
+  accent: Color;
+  white: Color;
+  /** Edges of this wall that border a door portal (hazard stripes). */
+  doorEdges: number[];
+}
+
+function buildWall(seg: Segment, q: Vector3[], ctx: WallContext): void {
+  const { walls, leds, rng, detailRng, base, accent, white } = ctx;
   const inside = seg.center;
   const lenU = (q[0].distanceTo(q[1]) + q[3].distanceTo(q[2])) / 2;
   const lenV = (q[0].distanceTo(q[3]) + q[1].distanceTo(q[2])) / 2;
@@ -75,7 +91,13 @@ function buildWall(
       ].map((p) => p.addScaledVector(normal, PANEL_RAISE));
 
       const shade = base.clone().multiplyScalar(tilt * (0.75 + rng() * 0.5)).lerp(accent, 0.04);
-      walls.quad(inner[0], inner[1], inner[2], inner[3], shade, inside);
+      const hazard = hazardEdge(ctx.doorEdges, i, j, nu, nv);
+      walls.detailQuad(inner, shade, inside, WALL_DETAIL_TUNING.enabled ? {
+        plates: panelPlates(inner, WALL_DETAIL_TUNING.plateSize),
+        seed: detailRng(),
+        kind: hazard < 0 ? WALL_KIND.PLATE : WALL_KIND.HAZARD + hazard,
+        accent,
+      } : null);
       const bevel = shade.clone().multiplyScalar(0.55);
       for (let k = 0; k < 4; k++) {
         const k1 = (k + 1) % 4;

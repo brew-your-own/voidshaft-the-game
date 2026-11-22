@@ -18,7 +18,11 @@ export interface Damageable {
 export interface Effects {
   muzzleFlash(pos: Vector3, color: number): void;
   impact(pos: Vector3, normal: Vector3, color: number): void;
-  explosion(pos: Vector3, size: number, color: number): void;
+  /**
+   * A blast of `size` (1 ≈ a missile). `wreck` means something broke apart:
+   * hull debris is thrown as well.
+   */
+  explosion(pos: Vector3, size: number, color: number, wreck?: boolean): void;
   trail(pos: Vector3, color: number): void;
   /** One-shot sound, optionally positioned in the world. */
   sound(name: SoundName, pos?: Vector3, scale?: number): void;

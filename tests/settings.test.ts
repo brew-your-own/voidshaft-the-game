@@ -18,6 +18,12 @@ describe('Settings', () => {
     expect(s.bindings.forward).toEqual(DEFAULT_BINDINGS.forward);
   });
 
+  it('screen shake defaults on and reads a stored boolean', () => {
+    expect(DEFAULT_SETTINGS.screenShake).toBe(true);
+    expect(Settings.parse(JSON.stringify({ screenShake: false })).screenShake).toBe(false);
+    expect(Settings.parse(JSON.stringify({ screenShake: 0 })).screenShake).toBe(true);
+  });
+
   it('persists changes and reloads them', () => {
     const store = new MemoryStore();
     const a = new Settings(store);

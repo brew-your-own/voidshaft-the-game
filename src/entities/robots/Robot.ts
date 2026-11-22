@@ -417,10 +417,10 @@ export class Robot implements Damageable {
       // Mines blow up either way; a shot-down one is weaker.
       const scale = rammed ? 1 : 0.6;
       this.world.projectiles.explode(
-        this.position, 'enemy', t.ram.damage * scale, t.ram.radius, t.deathSize, t.color, this.segment,
+        this.position, 'enemy', t.ram.damage * scale, t.ram.radius, t.deathSize, t.color, this.segment, true,
       );
     } else {
-      this.world.effects.explosion(this.position, t.deathSize, t.color);
+      this.world.effects.explosion(this.position, t.deathSize, t.color, true);
     }
     this.world.onDeath(this);
   }

@@ -23,6 +23,8 @@ export class PlayerWeapons {
   private laserTimer = 0;
   private missileTimer = 0;
   private missileSide = 0;
+  /** Missiles fired since last read (the game resets it), for camera kick. */
+  missilesLaunched = 0;
 
   constructor(
     private readonly player: Player,
@@ -55,6 +57,7 @@ export class PlayerWeapons {
         this.missileTimer = GUN_TUNING.missileCooldown;
         this.fire('missile', GUN_TUNING.missileMounts[this.missileSide]);
         this.effects.sound('missile');
+        this.missilesLaunched++;
         this.missileSide = 1 - this.missileSide;
       } else {
         event = 'no-missiles';

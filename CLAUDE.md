@@ -4,7 +4,7 @@ An original browser-based 6DOF tunnel shooter inspired by Descent (1995), built 
 
 ## Where we are
 
-Milestones 1–11 are done: six levels, `level01` plus five bigger grid-built ones. Next is hand playtesting and tuning. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
+Milestones 1–12 are done: six levels, `level01` plus five bigger grid-built ones. Next is hand playtesting and tuning. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
 
 ## Commands
 
@@ -31,10 +31,11 @@ Levels 02–06 are `GridLayout` maps: one string array per floor, one character 
 | `src/physics/` | `Ship` (6DOF body), `Collision` (sphere against wall triangles, with sliding) |
 | `src/combat/` | `ProjectileSystem` (swept hits, homing, `explode` splash damage), player weapons, raycasts, the `Effects` interface |
 | `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, tuning, models in `RobotMeshes`, shape helpers and merging in `meshKit`, design `proposals`, enemy-screen text in `bestiary`) |
-| `src/fx/` | Particles, a fixed `LightPool` for flashes, `StaticLights` (12 slots showing the level lights nearest the camera), `GameEffects` |
-| `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio |
-| `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
+| `src/fx/` | Particles, a fixed `LightPool` for flashes, `StaticLights` (12 slots showing the level lights nearest the camera, with an alarm override), `GameEffects` (explosions with pooled `Shockwaves` and bouncing `Debris`), `CameraShake` (trauma model, view-only), `EscapeSequence` (red strobe, klaxon, sparks, exit guide and rumble after the reactor dies) |
+| `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio, through a bass shelf and reverb (`AUDIO_TUNING`); `variants` holds alternative recipes for the sound lab |
+| `src/render/` | Renderer and bloom (with resolution scaling), `HitFlashPass` (damage vignette and colour fringe), adaptive `ResolutionGovernor`, palette, materials, `WallDetail` (procedural plate seams, rivets, vents, glowing seams and hazard stripes on walls, fed by attributes from `level/wallPanels.ts`), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
 | `src/shipyard/`, `shipyard.html` | Dev-only turntable page for robot models and proposals |
+| `src/soundlab/`, `soundlab.html` | Dev-only page to audition sound variants and tune bass and reverb |
 | `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (title screen with the level list, pause, settings, controls), `MapViewer` (whole-level map from the title screen), `EnemyViewer` (robot turntable and stats from the title screen) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
@@ -44,7 +45,7 @@ Levels 02–06 are `GridLayout` maps: one string array per floor, one character 
 ## Conventions
 
 - **Git:**
-  - Commit directly to `master`; do not create branches in this project.
+  - Commit directly to `main` (renamed from `master`; it tracks `origin/main`); do not create branches in this project.
   - Commits are signed (personal identity); check that `git log -1 --show-signature` shows "Good signature".
   - Commit only when asked.
 - **Headless logic:** game logic takes `Effects` / `SoundSink` interfaces so tests can pass `NO_EFFECTS` / `NO_SOUND`. Keep new gameplay code testable in the same way: no DOM or WebGL in logic classes.
@@ -61,6 +62,6 @@ Levels 02–06 are `GridLayout` maps: one string array per floor, one character 
 ## Verifying in the browser
 
 - The dev server config is in `.claude/launch.json`. Port 5173 is often taken by another local project, so Vite falls back to 5174.
-- The built-in browser pane can't capture the mouse and you can't hear audio there. Drive the game through the dev hooks on `window.game` instead: `debugFly(seconds, controls)`, `debugGiveKey`, `debugShip`, `debugPlayer`, `debugRobots`, `debugReactor`, `debugObjective`.
+- The built-in browser pane can't capture the mouse and you can't hear audio there. Drive the game through the dev hooks on `window.game` instead: `debugFly(seconds, controls)`, `debugGiveKey`, `debugShip`, `debugPlayer`, `debugRobots`, `debugReactor`, `debugObjective`, `debugEscape()` (destroys the reactor and starts the escape), `debugEscapeSequence`.
 - Particles and simulation only advance while the mouse is captured, or inside `debugFly`.
 - The menu overlay covers the canvas; hide it before taking screenshots.

@@ -41,7 +41,7 @@ export class Target implements Damageable {
     this.flash = 0.12;
     if (this.hp <= 0) {
       this.alive = false;
-      this.effects.explosion(this.position, 1.2, PALETTE.red);
+      this.effects.explosion(this.position, 1.2, PALETTE.red, true);
       this.object.removeFromParent();
     } else {
       this.effects.impact(hitPoint, hitPoint.clone().sub(this.position).normalize(), 0xffffff);

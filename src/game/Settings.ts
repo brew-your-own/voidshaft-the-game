@@ -55,6 +55,8 @@ export interface SettingsData {
   renderScale: number;
   /** Lower the resolution automatically when frames take too long. */
   adaptiveResolution: boolean;
+  /** Camera shake from explosions, hits and rumble. */
+  screenShake: boolean;
   bindings: Bindings;
 }
 
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   showTelemetry: false,
   renderScale: 1,
   adaptiveResolution: true,
+  screenShake: true,
   bindings: DEFAULT_BINDINGS,
 };
 
@@ -118,7 +121,7 @@ export class Settings {
     num('sfxVolume', 0, 1);
     num('musicVolume', 0, 1);
     num('renderScale', 0.5, 1);
-    for (const k of ['invertY', 'showTelemetry', 'adaptiveResolution'] as const) {
+    for (const k of ['invertY', 'showTelemetry', 'adaptiveResolution', 'screenShake'] as const) {
       if (typeof p[k] === 'boolean') out[k] = p[k];
     }
     if (p.bindings && typeof p.bindings === 'object') {

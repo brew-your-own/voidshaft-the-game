@@ -9,10 +9,15 @@ export class GeometrySink {
   private readonly ac = new Vector3();
   private readonly n = new Vector3();
 
-  /** Adds a triangle wound to face `inside`. */
-  tri(a: Vector3, b: Vector3, c: Vector3, color: Color, inside: Vector3): void {
+  /**
+   * Adds a triangle wound to face `inside`. Returns true when it swapped `b`
+   * and `c` to do so (vertices were stored as a, c, b), so subclasses can keep
+   * extra per-vertex data in the same order.
+   */
+  tri(a: Vector3, b: Vector3, c: Vector3, color: Color, inside: Vector3): boolean {
     this.n.crossVectors(this.ab.subVectors(b, a), this.ac.subVectors(c, a));
-    if (this.n.dot(this.ab.subVectors(inside, a)) < 0) {
+    const flipped = this.n.dot(this.ab.subVectors(inside, a)) < 0;
+    if (flipped) {
       [b, c] = [c, b];
       this.n.negate();
     }
@@ -22,6 +27,7 @@ export class GeometrySink {
       this.nrm.push(this.n.x, this.n.y, this.n.z);
       this.col.push(color.r, color.g, color.b);
     }
+    return flipped;
   }
 
   quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, inside: Vector3): void {

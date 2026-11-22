@@ -190,9 +190,12 @@ export class ProjectileSystem {
    * Splash damage with linear falloff from the hull, blocked by walls and
    * closed doors. The `faction`'s own side takes a reduced share.
    */
-  explode(at: Vector3, faction: Faction, damage: number, radius: number, size: number, color: number, segment = -1): void {
+  explode(
+    at: Vector3, faction: Faction, damage: number, radius: number, size: number, color: number,
+    segment = -1, wreck = false,
+  ): void {
     const cfg = WEAPON_TUNING.missile;
-    this.effects.explosion(at, size, color);
+    this.effects.explosion(at, size, color, wreck);
     const seg = segment >= 0 ? segment : this.level.findSegment(at);
     for (const d of this.damageables()) {
       if (!d.alive) continue;

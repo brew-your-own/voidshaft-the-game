@@ -1,3 +1,4 @@
+import type { ScreenGuide } from '../fx/EscapeSequence';
 import type { KeyColor } from '../level/types';
 import { keyCss } from '../render/palette';
 
@@ -25,6 +26,18 @@ export interface HudState {
   ships: number;
   /** Seconds left in the escape countdown, or null when not escaping. */
   countdown: number | null;
+  /** Escape set piece: urgency 0..1, alarm vignette strength 0..1 and the exit guide. */
+  escape?: EscapeHud | null;
+}
+
+export interface EscapeHud {
+  urgency: number;
+  /** Strobe pulse, 0..1; drives the red vignette in time with the lights. */
+  alarm: number;
+  /** Where to draw the exit marker, or null when there is nothing to point at. */
+  guide: ScreenGuide | null;
+  /** Portal hops left to the exit, or -1 when unknown. */
+  hops: number;
 }
 
 export interface EndScreen {
@@ -65,7 +78,8 @@ export class HUD {
       <div class="keys">${KEY_SLOTS.map((k) => `<span class="key" style="--key:${k.css}"></span>`).join('')}</div>
       <div class="message"></div>
       <div class="countdown"></div>
-      <div class="alarm"></div>
+      <div class="alarm" style="display:none"></div>
+      <div class="exit-guide" style="display:none"><i></i><span></span></div>
       <div class="ships"></div>
       <div class="gauge shield"><label>SHIELD</label><div class="bar"><i></i></div><span></span></div>
       <div class="gauge energy"><label>ENERGY</label><div class="bar"><i></i></div><span></span></div>
@@ -94,12 +108,18 @@ export class HUD {
     this.missileValue = root.querySelector('.missiles span')!;
     this.countdownEl = root.querySelector('.countdown')!;
     this.alarmEl = root.querySelector('.alarm')!;
+    this.guideEl = root.querySelector('.exit-guide')!;
+    this.guideArrow = root.querySelector('.exit-guide i')!;
+    this.guideLabel = root.querySelector('.exit-guide span')!;
     this.shipsEl = root.querySelector('.ships')!;
     this.endEl = root.querySelector('.end')!;
   }
 
   private readonly countdownEl: HTMLElement;
   private readonly alarmEl: HTMLElement;
+  private readonly guideEl: HTMLElement;
+  private readonly guideArrow: HTMLElement;
+  private readonly guideLabel: HTMLElement;
   private readonly shipsEl: HTMLElement;
   private readonly endEl: HTMLElement;
 
@@ -147,6 +167,7 @@ export class HUD {
       setText(this.countdownEl, `ESCAPE  ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`);
       this.countdownEl.classList.toggle('critical', t < 10);
     }
+    this.updateEscape(escaping && !s.automap ? s.escape ?? null : null);
     this.shieldBar.style.width = `${s.shield}%`;
     setText(this.shieldValue, String(Math.ceil(s.shield)));
     this.shieldBar.parentElement!.parentElement!.classList.toggle('low', s.shield < 25);
@@ -168,6 +189,23 @@ TRI ${(s.triangles / 1000).toFixed(1).padStart(5)}k
 RES ${String(Math.round(s.resolution * 100)).padStart(5)}%`
       : `${s.levelName}
 HOSTILES ${s.hostiles}`);
+  }
+
+  /** Pulsing countdown, alarm vignette in time with the strobe, exit marker. */
+  private updateEscape(e: EscapeHud | null): void {
+    // Without escape data, the CSS animations take over.
+    this.alarmEl.style.animation = e ? 'none' : '';
+    this.alarmEl.style.opacity = e ? (0.25 + 0.75 * e.alarm).toFixed(3) : '';
+    this.countdownEl.style.setProperty('--pulse', e ? `${(0.9 - 0.6 * e.urgency).toFixed(2)}s` : '');
+    const g = e?.guide;
+    this.guideEl.style.display = g ? '' : 'none';
+    if (!g) return;
+    // Normalised screen coordinates (y up) to CSS percentages.
+    this.guideEl.style.left = `${((g.x + 1) * 50).toFixed(2)}%`;
+    this.guideEl.style.top = `${((1 - g.y) * 50).toFixed(2)}%`;
+    this.guideEl.classList.toggle('edge', !g.onScreen);
+    this.guideArrow.style.transform = g.onScreen ? '' : `rotate(${(-g.angle).toFixed(3)}rad)`;
+    setText(this.guideLabel, e!.hops > 0 ? `EXIT ${e!.hops}` : 'EXIT');
   }
 
   /** Crosshair flash when one of our shots connects. */

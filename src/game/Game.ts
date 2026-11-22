@@ -1,4 +1,4 @@
-import { Color, FogExp2, Group, HemisphereLight, PerspectiveCamera, PointLight, Scene } from 'three';
+import { Color, FogExp2, Group, HemisphereLight, PerspectiveCamera, PointLight, Quaternion, Scene, Vector3 } from 'three';
 import { AudioEngine } from '../audio/Audio';
 import { PlayerWeapons } from '../combat/PlayerWeapons';
 import { ProjectileRenderer } from '../combat/ProjectileRenderer';
@@ -6,12 +6,15 @@ import { ProjectileSystem } from '../combat/Projectiles';
 import type { Damageable } from '../combat/types';
 import { Door } from '../entities/Door';
 import { Pickup } from '../entities/Pickup';
-import { Reactor, type ReactorEvent } from '../entities/Reactor';
+import { Reactor, REACTOR_TUNING, type ReactorEvent } from '../entities/Reactor';
 import { Robot, type RobotWorld } from '../entities/robots/Robot';
 import { setRobotEnvironment } from '../entities/robots/RobotMeshes';
 import { Target } from '../entities/Target';
+import { CameraShake, SHAKE_TUNING, damageTrauma, explosionTrauma } from '../fx/CameraShake';
+import { EscapeSequence, screenGuide } from '../fx/EscapeSequence';
 import { GameEffects } from '../fx/GameEffects';
 import { StaticLights } from '../fx/StaticLights';
+import { hitFlashStrength } from '../render/HitFlashPass';
 import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
 import { MapMemory } from '../level/automap';
@@ -43,6 +46,11 @@ const LIGHT_SCALE = 0.15;
 const RESPAWN_DELAY = 2.5;
 /** Delay before the end screen, so the final explosion can play. */
 const END_DELAY = 2.2;
+/** How much of the escape rumble (0..1) becomes sustained camera shake. */
+const ESCAPE_RUMBLE_SHAKE = 0.65;
+
+const _shakeOffset = new Vector3();
+const _shakeTurn = new Quaternion();
 
 const IDLE_CONTROLS: FlightControls = {
   forward: 0, strafe: 0, lift: 0, roll: 0, pitch: 0, yaw: 0,
@@ -67,14 +75,18 @@ export class Game {
   private readonly objective: Objective;
   private readonly alarmLight = new HemisphereLight(0xff1030, 0x200008, 0);
   private endTimer = -1;
-  private shake = 0;
+  /** View-only shake; see fx/CameraShake. */
+  private readonly cameraShake = new CameraShake();
   private readonly culler: PortalCuller;
   private readonly settings = new Settings();
   private readonly audio = new AudioEngine();
   private readonly effects = new GameEffects(this.audio);
   private readonly menu: Menu;
   private started = false;
-  private lastBeep = -1;
+  /** Escape set piece: red strobe, klaxon, sparks, exit guide, rumble. */
+  private readonly escape: EscapeSequence;
+  private readonly fogBase = new Color();
+  private readonly backgroundBase = new Color();
   private warningTimer = 0;
   private readonly projectiles: ProjectileSystem;
   private readonly projectileRenderer = new ProjectileRenderer();
@@ -185,9 +197,15 @@ export class Game {
       this.damageables.push(...this.reactor.damageables);
     }
     this.objective = new Objective(levelData.reactor?.countdown ?? 0);
+    this.escape = new EscapeSequence(this.level, this.effects, (p) => this.effects.particles.emit(p), this.audio);
+    this.fogBase.copy((this.scene.fog as FogExp2).color);
+    this.backgroundBase.copy(this.scene.background as Color);
     this.scene.add(this.alarmLight);
     this.weapons = new PlayerWeapons(this.player, this.level, this.projectiles, this.effects);
     this.scene.add(this.effects.object, this.projectileRenderer.object);
+    this.effects.setLevel(this.level);
+    this.effects.shockwaves.viewer = this.camera.position;
+    this.effects.onExplosion = (p, size) => this.cameraShake.add(explosionTrauma(size, p.distanceTo(this.ship.position)));
 
     // Ship headlight rides with the camera.
     const headlight = new PointLight(0xcfe3ff, 1.6, 22, 1.0);
@@ -250,6 +268,22 @@ export class Game {
     return this.objective;
   }
 
+  get debugEscapeSequence(): EscapeSequence {
+    return this.escape;
+  }
+
+  /**
+   * Dev hook: blows up the reactor (emitters first) and plays out its death,
+   * which starts the escape. Without a reactor, starts the escape directly.
+   */
+  debugEscape(): void {
+    const r = this.reactor;
+    if (!r) { this.objective.reactorDestroyed(); return; }
+    for (const p of r.pylons) p.damage(1e6, p.position);
+    r.damage(1e6, r.position);
+    this.debugFly(REACTOR_TUNING.deathTime + 0.1, {});
+  }
+
   /**
    * Compiles every shader up front. Otherwise each robot type, the reactor
    * and so on compile the first time they come into view, stalling a frame.
@@ -275,6 +309,7 @@ export class Game {
     this.ship.invertY = s.invertY;
     this.audio.setVolumes(s.masterVolume, s.sfxVolume, s.musicVolume);
     this.hud.showTelemetry = s.showTelemetry;
+    this.cameraShake.enabled = s.screenShake;
   }
 
   /** Mouse captured → fly; released mid-mission → pause menu. */
@@ -302,6 +337,7 @@ export class Game {
     const dt = Math.min((time - this.lastTime) / 1000, MAX_FRAME);
     this.lastTime = time;
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
+    this.ctx.hitFlash.update(dt);
 
     if (this.viewer.active) {
       this.ctx.renderer.info.reset();
@@ -370,6 +406,12 @@ export class Game {
       hostiles: this.robots.reduce((n, r) => n + (r.alive ? 1 : 0), 0),
       ships: this.objective.ships,
       countdown: this.objective.state === 'escape' ? this.objective.timeLeft : null,
+      escape: this.escape.active ? {
+        urgency: this.escape.urgency,
+        alarm: this.escape.pulse,
+        guide: this.escape.guideTarget ? screenGuide(this.escape.guideTarget, this.camera) : null,
+        hops: this.escape.guideHops,
+      } : null,
     });
     this.cpuMs += (performance.now() - cpuStart - this.cpuMs) * 0.05;
     requestAnimationFrame(this.frame);
@@ -445,8 +487,14 @@ export class Game {
 
     if (this.player.damageTaken > 0) {
       this.hud.flashImpact(10 + this.player.damageTaken);
-      this.audio.play('hit');
+      this.audio.play('hit', undefined, hitFlashStrength(this.player.damageTaken));
+      this.cameraShake.add(damageTrauma(this.player.damageTaken));
+      this.ctx.hitFlash.flash(hitFlashStrength(this.player.damageTaken));
       this.player.damageTaken = 0;
+    }
+    if (this.weapons.missilesLaunched > 0) {
+      this.cameraShake.add(SHAKE_TUNING.missileLaunch);
+      this.weapons.missilesLaunched = 0;
     }
     if (this.ship.lastImpact > 8) {
       this.hud.flashImpact(this.ship.lastImpact);
@@ -491,6 +539,7 @@ export class Game {
       for (const e of this.reactor.events.splice(0)) this.onReactorEvent(e);
     }
     this.effects.update(dt);
+    this.cameraShake.update(dt);
     this.updateMission(dt);
     this.handleDeath(dt);
   }
@@ -504,11 +553,11 @@ export class Game {
         break;
       }
       case 'shield-down': this.hud.message('REACTOR SHIELD DOWN', '#ffa31a'); break;
-      case 'core-critical': this.hud.message('REACTOR CRITICAL', '#ff2a4d'); this.shake = 1.5; break;
+      case 'core-critical': this.hud.message('REACTOR CRITICAL', '#ff2a4d'); this.cameraShake.add(0.5); break;
       case 'destroyed':
         this.objective.reactorDestroyed();
         this.objective.kills++;
-        this.shake = 2;
+        this.cameraShake.add(0.8);
         this.hud.message('REACTOR DESTROYED — ESCAPE!', '#ff2a4d');
         break;
     }
@@ -524,24 +573,16 @@ export class Game {
       this.player.shield = 0;
       this.player.alive = false;
       this.effects.explosion(this.ship.position, 3, 0xffa31a);
-      this.shake = 3;
+      this.cameraShake.add(1);
     }
-    if (o.state === 'escape' && o.timeLeft < 10) {
-      // Countdown beeps for the last ten seconds, higher for the last five.
-      const second = Math.ceil(o.timeLeft);
-      if (second !== this.lastBeep) {
-        this.lastBeep = second;
-        this.audio.play('beep', undefined, second <= 5 ? 1.5 : 1);
-      }
-    }
-    if (o.state === 'escape') {
-      const urgency = 1 - o.timeLeft / Math.max(1, o.countdown);
-      this.alarmLight.intensity = (0.25 + 0.35 * urgency) * (0.5 + 0.5 * Math.sin(o.elapsed * 6));
-      this.shake = Math.max(this.shake, 0.15 + 0.35 * urgency);
-    } else {
-      this.alarmLight.intensity = 0;
-    }
-    this.shake = Math.max(0, this.shake - dt * 1.5);
+    // Escape set piece: strobing red lights and fog, klaxon and countdown, sparks, rumble.
+    const esc = this.escape;
+    esc.update(dt, o.state, o.timeLeft, o.countdown, this.ship.position, this.ship.segment);
+    this.staticLights.setAlarm(esc.alarmColor, esc.tint, esc.lightScale[0], esc.lightScale[1]);
+    this.alarmLight.intensity = esc.ambient;
+    (this.scene.fog as FogExp2).color.copy(this.fogBase).lerp(esc.fogColor, esc.fogTint);
+    (this.scene.background as Color).copy(this.backgroundBase).lerp(esc.fogColor, esc.fogTint);
+    this.cameraShake.setSustained(esc.active ? ESCAPE_RUMBLE_SHAKE * esc.rumble : 0);
 
     if (!o.over) return;
     if (this.endTimer < 0) this.endTimer = 0;
@@ -647,11 +688,9 @@ export class Game {
   private syncCamera(alpha: number): void {
     this.camera.position.lerpVectors(this.ship.prevPosition, this.ship.position, alpha);
     this.camera.quaternion.copy(this.ship.quaternion);
-    if (this.shake > 0) {
-      const a = this.shake * 0.06;
-      this.camera.position.x += (Math.random() - 0.5) * a;
-      this.camera.position.y += (Math.random() - 0.5) * a;
-      this.camera.position.z += (Math.random() - 0.5) * a;
-    }
+    // View-only shake: offset in camera space plus a small rotation.
+    const s = this.cameraShake;
+    this.camera.position.add(_shakeOffset.copy(s.offset).applyQuaternion(this.ship.quaternion));
+    this.camera.quaternion.multiply(_shakeTurn.setFromEuler(s.rotation));
   }
 }

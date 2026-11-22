@@ -190,7 +190,7 @@ export class Reactor implements Damageable {
       return;
     }
     pylon.alive = false;
-    this.effects.explosion(pylon.position, 1.1, PALETTE.cyan);
+    this.effects.explosion(pylon.position, 1.1, PALETTE.cyan, true);
     pylon.object.removeFromParent();
     this.events.push('pylon-destroyed');
     if (!this.shielded) {
@@ -270,7 +270,7 @@ export class Reactor implements Damageable {
     this.rings[1].rotation.y += dt * 9;
     if (this.dying >= t.deathTime) {
       this.destroyed = true;
-      this.effects.explosion(this.position, 3.2, PALETTE.amber);
+      this.effects.explosion(this.position, 3.2, PALETTE.amber, true);
       this.object.removeFromParent();
       this.events.push('destroyed');
     }

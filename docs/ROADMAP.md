@@ -2,7 +2,7 @@
 
 An original in-browser 6DOF tunnel shooter, inspired by Descent (1995): you fly freely through enclosed mines, fight robots, collect keys, destroy a reactor and escape before the mine collapses. The game uses no Descent names, levels or assets.
 
-_Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand playtesting and tuning._
+_Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand playtesting and tuning._
 
 ## Decisions
 
@@ -13,7 +13,7 @@ _Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand pl
 | Levels | Connected "cube segments" (eight-vertex deformable boxes), written in TypeScript and exported to JSON |
 | Look | Untextured flat-shaded polygons, a cyberpunk palette, lots of LED strips, bloom. Textures come later, through the material layer in `src/render/Materials.ts` |
 | Audio | Synthesised in the browser with WebAudio; no audio files |
-| Workflow | Commit straight to `master`, no feature branches. Commits are signed |
+| Workflow | Commit straight to `main`, no feature branches. Commits are signed |
 | Input | Keyboard and mouse only; gamepad support was dropped from the plan |
 
 ## Milestones
@@ -31,6 +31,7 @@ _Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand pl
 | 9 | Level selector and map viewer | ✅ Done | `41d51bc` |
 | 10 | Five bigger levels | ✅ Done | `5bffdc9` |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
+| 12 | Juice: escape sequence, wall detail, explosions, heavier sound | ✅ Done | (this commit) |
 
 ### What each milestone delivered
 
@@ -121,6 +122,12 @@ _Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand pl
 - **Draw calls:** each model is built from many parts, then merged into one mesh per material (`mergeByMaterial` in `meshKit.ts`). The 13 robots in `level01` cost 63 draw calls instead of 271.
 - **Shipyard:** `/shipyard.html` (dev server only) shows every robot model on a turntable at true scale, next to any proposals in `src/entities/robots/proposals.ts`. Click a name for a close-up, drag to turn it, ← → to step through, R for the collision sphere. The six unpicked proposals are in git history.
 
+**12. Juice: escape sequence, wall detail, explosions, heavier sound**
+- **Escape** (`src/fx/EscapeSequence.ts`): once the reactor dies, the level lights strobe red (`StaticLights.setAlarm`), the fog and background turn red, the camera rumbles, sparks fall, a klaxon blasts, and a synthesised voice counts down the last ten seconds. An on-screen marker points along the shortest route to the exit. `debugEscape()` starts it.
+- **Wall detail** (`src/render/WallDetail.ts`, `src/level/wallPanels.ts`): the wall material draws plate seams, rivets, vents, hazard stripes and some glowing seams procedurally, from per-vertex panel coordinates. No textures.
+- **Explosions:** pooled shockwave shells and rings (they fade near the camera so a close blast doesn't white out the screen), bouncing debris, embers, trauma-model camera shake (view-only, can be turned off in settings), and a red vignette with colour fringing when you take damage (`HitFlashPass`).
+- **Sound:** a bass shelf and a synthetic reverb on the effects bus (`AUDIO_TUNING`), a `drive()` distortion helper, and new laser (Pulse blaster), explosion (Thunder) and hit (Hull clang) sounds. The hit sound follows the damage taken. The picks were made on `/soundlab.html` (dev server only), which plays every variant in `src/audio/variants.ts` and has bass and reverb sliders.
+
 ## Next
 
 ### Candidates
@@ -155,6 +162,7 @@ _Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand pl
 - **Textures:** not started, as decided.
 - **New levels unplayed by hand:** they pass the solvability and placement tests and were flown with scripted runs, but nobody has played them through. Light levels were tuned from a few screenshots only.
 - **Grid look:** the grid levels are blockier than `level01`'s hand-extruded tunnels (the shear helps). Mixing in more extruded side tunnels and rooms would add variety.
+- **Level04 green wash:** lime LEDs bloom much more than violet ones, so level04 looks washed out. LED brightness could be scaled by colour.
 - **Light pool popping:** in a big level a distant room can lose its lamp when 12 closer lights win the slots; it fades rather than pops, but it may be visible in long sight lines.
 
 ## Working on it

@@ -52,7 +52,27 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
   position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
   color: #ff2a4d; font-size: 26px; letter-spacing: 0.25em; text-shadow: 0 0 12px currentColor;
 }
-.countdown.critical { animation: blink 0.4s steps(2) infinite; font-size: 32px; }
+.countdown { animation: pulse var(--pulse, 0.9s) ease-in-out infinite; }
+.countdown.critical {
+  top: 22%; font-size: 64px; letter-spacing: 0.15em; color: #ff1a24;
+  text-shadow: 0 0 18px currentColor, 0 0 42px currentColor;
+}
+@keyframes pulse { 50% { opacity: 0.55; transform: translateX(-50%) scale(1.08); } }
+/* Exit guide: a diamond on the next portal, or an arrow at the screen edge. */
+.exit-guide {
+  position: absolute; transform: translate(-50%, -50%); color: #7dff3a;
+  font-size: 11px; letter-spacing: 0.25em; text-align: center; text-shadow: 0 0 8px currentColor;
+}
+.exit-guide i {
+  display: block; margin: 0 auto 6px; width: 18px; height: 18px; border: 2px solid currentColor;
+  transform: rotate(45deg); box-shadow: 0 0 12px currentColor; animation: blink 0.6s steps(2) infinite;
+}
+.exit-guide.edge i {
+  width: 0; height: 0; border: none; box-shadow: none; animation: none;
+  border-top: 12px solid transparent; border-bottom: 12px solid transparent; border-left: 22px solid currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+#hud.paused .exit-guide, #hud.automap .exit-guide { display: none; }
 .alarm {
   position: absolute; inset: 0; animation: alarm 1s ease-in-out infinite;
   background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 20, 50, 0.35));
