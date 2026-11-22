@@ -32,7 +32,7 @@ _Status as of 2026-11-22: milestones 1–13 are done, on `main`. Next: hand play
 | 10 | Five bigger levels | ✅ Done | `5bffdc9` |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
 | 12 | Juice: escape sequence, wall detail, explosions, heavier sound | ✅ Done | `1faabf5` |
-| 13 | Going on to the next level | ✅ Done | (this commit) |
+| 13 | Going on to the next level | ✅ Done | `aa85654` |
 
 ### What each milestone delivered
 
