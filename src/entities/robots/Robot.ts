@@ -44,12 +44,13 @@ export const AI_TUNING = {
 const FORWARD = new Vector3(0, 0, -1);
 const WORLD_UP = new Vector3(0, 1, 0);
 const WHITE = new Color(4, 4, 4);
+// Module scratch, only ever used within a single method or function with
+// no calls in between. Anything that lives across calls is a per-robot field.
 const _m = new Matrix4();
 const _q = new Quaternion();
-const _v = new Vector3();
-const _w = new Vector3();
-const _desired = new Vector3();
-const _origin = new Vector3();
+const _up = new Vector3();
+const _zero = new Vector3();
+const _push = new Vector3();
 
 /** A hostile robot: a sphere body steered by a small state machine. */
 export class Robot implements Damageable {
@@ -92,6 +93,20 @@ export class Robot implements Damageable {
   private flash = 0;
   private time: number;
 
+  // Per-robot scratch vectors, each with one job, so no call can overwrite a
+  // value another method is still holding.
+  /** Velocity the AI wants; set by think() and its states, used by move(). */
+  private readonly desired = new Vector3();
+  private readonly fwd = new Vector3();
+  private readonly toPlayer = new Vector3();
+  private readonly aim = new Vector3();
+  private readonly shotDir = new Vector3();
+  private readonly muzzle = new Vector3();
+  private readonly target = new Vector3();
+  private readonly look = new Vector3();
+  private readonly dv = new Vector3();
+  private readonly hitNormal = new Vector3();
+
   constructor(readonly type: RobotType, data: RobotData, private readonly world: RobotWorld) {
     this.tuning = ROBOT_TUNING[type];
     this.radius = this.tuning.radius;
@@ -113,8 +128,9 @@ export class Robot implements Damageable {
     return this.mesh.object;
   }
 
-  get forward(): Vector3 {
-    return _w.copy(FORWARD).applyQuaternion(this.quaternion);
+  /** Nose direction (in a per-robot vector, rewritten on each read). */
+  private get forward(): Vector3 {
+    return this.fwd.copy(FORWARD).applyQuaternion(this.quaternion);
   }
 
   damage(amount: number, hitPoint: Vector3): void {
@@ -125,7 +141,7 @@ export class Robot implements Damageable {
       this.die(false);
       return;
     }
-    this.world.effects.impact(hitPoint, _v.subVectors(hitPoint, this.position).normalize(), 0xffffff);
+    this.world.effects.impact(hitPoint, this.hitNormal.subVectors(hitPoint, this.position).normalize(), 0xffffff);
     // Being shot reveals the shooter's position.
     const p = this.world.player;
     if (p.alive) this.alert(p.position, p.segment, true);
@@ -174,11 +190,11 @@ export class Robot implements Damageable {
     const t = this.tuning;
     this.canSee = false;
     if (!p.alive) return;
-    _v.subVectors(p.position, this.position);
-    const dist = _v.length();
+    const to = this.toPlayer.subVectors(p.position, this.position);
+    const dist = to.length();
     if (dist > t.sightRange) return;
     // Patrolling robots only notice what's in front of them, or close by.
-    if (this.state === 'patrol' && dist > t.hearRange && _v.dot(this.forward) < t.sightConeCos * dist) return;
+    if (this.state === 'patrol' && dist > t.hearRange && to.dot(this.forward) < t.sightConeCos * dist) return;
     if (!this.world.level.lineOfSight(this.position, this.segment, p.position)) return;
     this.canSee = true;
     this.lostTime = 0;
@@ -224,7 +240,7 @@ export class Robot implements Damageable {
         if (this.lostTime > AI_TUNING.forgetAfter) {
           this.state = 'patrol';
           this.waypointSegment = -1;
-          _desired.set(0, 0, 0);
+          this.desired.set(0, 0, 0);
           break;
         }
         this.chase();
@@ -253,7 +269,7 @@ export class Robot implements Damageable {
     if (this.pause > 0) {
       this.pause -= dt;
       if (this.pause <= 0) this.waypointSegment = -1;
-      _desired.set(0, 0, 0);
+      this.desired.set(0, 0, 0);
       this.face(null, dt);
       return;
     }
@@ -265,19 +281,19 @@ export class Robot implements Damageable {
   private chase(): void {
     // Head to where the player was last seen.
     const arrived = this.navigate(this.lastSeen, this.lastSeenSegment, 0.8);
-    if (arrived) _desired.set(0, 0, 0);
+    if (arrived) this.desired.set(0, 0, 0);
   }
 
   private attack(dt: number): void {
     const t = this.tuning;
     const p = this.world.player;
-    const to = _v.subVectors(p.position, this.position);
+    const to = this.toPlayer.subVectors(p.position, this.position);
     const dist = to.length();
     to.multiplyScalar(1 / Math.max(dist, 1e-6));
 
     if (t.ram) {
       // Kamikaze: straight at the predicted position.
-      _desired.copy(p.position).addScaledVector(p.velocity, (dist / t.speed) * t.lead)
+      this.desired.copy(p.position).addScaledVector(p.velocity, (dist / t.speed) * t.lead)
         .sub(this.position).setLength(t.speed);
       return;
     }
@@ -289,9 +305,9 @@ export class Robot implements Damageable {
       this.strafeTimer = 1.2 + this.world.rng() * 1.8;
       randomPerpendicular(to, this.strafeDir, this.world.rng);
     }
-    _desired.copy(to).multiplyScalar(radial).addScaledVector(this.strafeDir, t.strafe);
-    if (_desired.lengthSq() > 1) _desired.normalize();
-    _desired.multiplyScalar(t.speed);
+    this.desired.copy(to).multiplyScalar(radial).addScaledVector(this.strafeDir, t.strafe);
+    if (this.desired.lengthSq() > 1) this.desired.normalize();
+    this.desired.multiplyScalar(t.speed);
   }
 
   private flee(): void {
@@ -309,7 +325,7 @@ export class Robot implements Damageable {
       this.waypointSegment = best;
       this.waypoint.copy(level.segments[best].center);
     }
-    if (this.navigate(this.waypoint, this.waypointSegment, 1)) _desired.set(0, 0, 0);
+    if (this.navigate(this.waypoint, this.waypointSegment, 1)) this.desired.set(0, 0, 0);
   }
 
   /**
@@ -328,21 +344,21 @@ export class Robot implements Damageable {
       }
       if (!this.path || this.path.length < 2) {
         // Unreachable (closed door in the way): wait here.
-        _desired.set(0, 0, 0);
+        this.desired.set(0, 0, 0);
         return true;
       }
       const side = level.segments[this.segment].children.indexOf(this.path[1]);
-      target = level.sideCenter(this.segment, side, _origin);
+      target = level.sideCenter(this.segment, side, this.target);
       // Aim a little past the portal so we don't stall on its plane.
       target.lerp(level.segments[this.path[1]].center, 0.25);
-      _desired.subVectors(target, this.position).setLength(speed);
+      this.desired.subVectors(target, this.position).setLength(speed);
       return false;
     }
-    _desired.subVectors(target, this.position);
-    const dist = _desired.length();
+    this.desired.subVectors(target, this.position);
+    const dist = this.desired.length();
     if (dist < AI_TUNING.arriveDistance) return true;
     // Slow down on arrival.
-    _desired.multiplyScalar((speed * Math.min(1, dist / 4)) / dist);
+    this.desired.multiplyScalar((speed * Math.min(1, dist / 4)) / dist);
     return false;
   }
 
@@ -367,7 +383,7 @@ export class Robot implements Damageable {
       const gun = t.guns[i];
       const inVolley = this.burstLeft[i] > 0;
       if (!inVolley && (this.state !== 'attack' || !this.canSee || !p.alive)) continue;
-      const aim = this.aimDirection(gun, _v);
+      const aim = this.aimDirection(gun, this.aim);
       if (!inVolley && aim.dot(this.forward) < t.fireConeCos) continue;
       this.fire(gun, aim);
       if (!inVolley) this.burstLeft[i] = gun.burst;
@@ -388,10 +404,11 @@ export class Robot implements Damageable {
     const level = this.world.level;
     // Shots leave from the nose but go where the robot is aiming, within
     // its fire cone: it has to turn toward the player first.
-    const muzzle = _origin.copy(this.position).addScaledVector(this.forward, this.radius * 0.9);
+    const muzzle = this.muzzle.copy(this.position).addScaledVector(this.forward, this.radius * 0.9);
     const seg = level.findSegment(muzzle, this.segment);
     if (seg < 0) return;
-    const dir = aim.clone();
+    // spawn() copies the direction, so a per-robot vector will do.
+    const dir = this.shotDir.copy(aim);
     if (gun.spread > 0) {
       dir.x += (this.world.rng() - 0.5) * 2 * gun.spread;
       dir.y += (this.world.rng() - 0.5) * 2 * gun.spread;
@@ -432,11 +449,11 @@ export class Robot implements Damageable {
     const level = this.world.level;
 
     // Face the player while fighting, otherwise the direction of travel.
-    if (this.state === 'attack' && this.canSee) this.face(this.aimDirection(t.guns[0] ?? RAM_AIM, _w).clone(), dt);
+    if (this.state === 'attack' && this.canSee) this.face(this.aimDirection(t.guns[0] ?? RAM_AIM, this.aim), dt);
     else if (this.state !== 'patrol') this.face(null, dt);
 
     // Accelerate toward the desired velocity.
-    const dv = _v.subVectors(_desired, this.velocity);
+    const dv = this.dv.subVectors(this.desired, this.velocity);
     const maxDv = t.accel * dt;
     if (dv.lengthSq() > maxDv * maxDv) dv.setLength(maxDv);
     this.velocity.add(dv);
@@ -471,10 +488,10 @@ export class Robot implements Damageable {
     let look = dir;
     if (!look) {
       if (this.velocity.lengthSq() < 1) return;
-      look = _w.copy(this.velocity).normalize();
+      look = this.look.copy(this.velocity).normalize();
     }
-    const up = Math.abs(look.y) < 0.95 ? WORLD_UP : _v.set(0, 1, 0).applyQuaternion(this.quaternion);
-    _m.lookAt(_origin.set(0, 0, 0), look, up);
+    const up = Math.abs(look.y) < 0.95 ? WORLD_UP : _up.set(0, 1, 0).applyQuaternion(this.quaternion);
+    _m.lookAt(_zero, look, up);
     _q.setFromRotationMatrix(_m);
     this.quaternion.rotateTowards(_q, this.tuning.turnRate * dt);
   }
@@ -515,7 +532,7 @@ function randomPerpendicular(axis: Vector3, out: Vector3, rng: () => number): Ve
 
 /** Moves `pos` out of the other sphere by `share` of the overlap. */
 function pushApart(pos: Vector3, vel: Vector3, r: number, other: Vector3, otherR: number, share: number): void {
-  const d = _v.subVectors(pos, other);
+  const d = _push.subVectors(pos, other);
   const dist = d.length();
   const overlap = r + otherR - dist;
   if (overlap <= 0) return;

@@ -57,7 +57,8 @@ export class Level {
   readonly doors: DoorState[];
   private readonly nearWallsCache = new Map<number, Tri[]>();
   private readonly nearDoorsCache = new Map<number, DoorState[]>();
-  private readonly doorByPortal = new Map<string, DoorState>();
+  /** Door in each portal, indexed by `segment * 6 + side` (doorAt runs in hot paths: line of sight, pathing). */
+  private readonly doorByPortal: (DoorState | undefined)[];
 
   constructor(readonly data: LevelData) {
     this.name = data.name;
@@ -78,6 +79,7 @@ export class Level {
       return { index, verts: s.verts, children: s.children, color: s.color, center, sides };
     });
 
+    this.doorByPortal = new Array(this.segments.length * 6).fill(undefined);
     this.doors = (data.doors ?? []).map((d, index): DoorState => {
       const seg = this.segments[d.segment];
       const child = seg.children[d.side];
@@ -90,15 +92,15 @@ export class Level {
         tris: [...side.tris, ...this.segments[child].sides[OPPOSITE[d.side]].tris],
         openAmount: 0, solid: true,
       };
-      this.doorByPortal.set(`${d.segment}:${d.side}`, door);
-      this.doorByPortal.set(`${child}:${OPPOSITE[d.side]}`, door);
+      this.doorByPortal[d.segment * 6 + d.side] = door;
+      this.doorByPortal[child * 6 + OPPOSITE[d.side]] = door;
       return door;
     });
   }
 
   /** Door in the portal on `side` of `seg`, if any (works from both sides). */
   doorAt(seg: number, side: number): DoorState | undefined {
-    return this.doorByPortal.get(`${seg}:${side}`);
+    return this.doorByPortal[seg * 6 + side];
   }
 
   /** Doors within two portal hops of a segment. */

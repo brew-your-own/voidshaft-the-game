@@ -43,6 +43,15 @@ export class StaticLights {
   private tintAmount = 0;
   /** Intensity multipliers for even / odd slots, so they can strobe in anti-phase. */
   private readonly scales: [number, number] = [1, 1];
+  // Reused by select() every frame, so picking lights allocates nothing.
+  private readonly scores: Float64Array;
+  /** Light indices, re-sorted in place by score each frame (nearly sorted already, so cheap). */
+  private readonly order: number[];
+  private readonly current: Uint8Array;
+  private readonly wanted: Uint8Array;
+  private readonly placed: Uint8Array;
+  private readonly missing: number[] = [];
+  private readonly byScore = (a: number, b: number) => this.scores[a] - this.scores[b];
 
   constructor(
     private readonly lights: readonly LightData[],
@@ -51,6 +60,11 @@ export class StaticLights {
   ) {
     this.positions = lights.map((l) => new Vector3(...l.position));
     this.baseColors = lights.map((l) => new Color(l.color));
+    this.scores = new Float64Array(lights.length);
+    this.order = lights.map((_, i) => i);
+    this.current = new Uint8Array(lights.length);
+    this.wanted = new Uint8Array(lights.length);
+    this.placed = new Uint8Array(lights.length);
     this.slots = Array.from({ length: slots }, () => {
       const light = new PointLight(0xffffff, 0, 1, STATIC_LIGHT_TUNING.decay);
       this.object.add(light);
@@ -87,33 +101,39 @@ export class StaticLights {
   /** Picks the lights to show from `eye`, advances the fades and applies the alarm override. */
   update(dt: number, eye: Vector3): void {
     if (this.lights.length > this.slots.length) this.select(dt, eye);
-    this.slots.forEach((s, i) => {
-      if (s.source < 0) return;
+    for (let i = 0; i < this.slots.length; i++) {
+      const s = this.slots[i];
+      if (s.source < 0) continue;
       s.light.intensity = this.lights[s.source].intensity * this.scale * Math.max(0, s.level) * this.scales[i & 1];
       const base = this.baseColors[s.source];
       s.light.color.copy(this.tintAmount > 0 ? _c.copy(base).lerp(this.tintColor, this.tintAmount) : base);
-    });
+    }
   }
 
   private select(dt: number, eye: Vector3): void {
     const n = this.slots.length;
-    const current = new Set(this.slots.map((s) => s.source));
-    const ranked = this.lights
-      .map((l, i) => ({ i, score: _v.copy(this.positions[i]).distanceTo(eye) - l.distance - (current.has(i) ? STATIC_LIGHT_TUNING.stickiness : 0) }))
-      .sort((a, b) => a.score - b.score)
-      .slice(0, n)
-      .map((r) => r.i);
-    const wanted = new Set(ranked);
-    const placed = new Set<number>();
+    const { scores, order, current, wanted, placed, missing } = this;
+    current.fill(0);
+    wanted.fill(0);
+    placed.fill(0);
+    for (const s of this.slots) if (s.source >= 0) current[s.source] = 1;
+    for (let i = 0; i < this.lights.length; i++) {
+      scores[i] = _v.copy(this.positions[i]).distanceTo(eye) - this.lights[i].distance
+        - (current[i] ? STATIC_LIGHT_TUNING.stickiness : 0);
+    }
+    order.sort(this.byScore);
+    for (let k = 0; k < n; k++) wanted[order[k]] = 1;
     for (const s of this.slots) {
-      if (s.source >= 0 && wanted.has(s.source)) { placed.add(s.source); s.next = -1; }
-      else if (s.next >= 0 && wanted.has(s.next)) placed.add(s.next);
+      if (s.source >= 0 && wanted[s.source]) { placed[s.source] = 1; s.next = -1; }
+      else if (s.next >= 0 && wanted[s.next]) placed[s.next] = 1;
       else s.next = -1;
     }
-    const missing = ranked.filter((i) => !placed.has(i));
+    missing.length = 0;
+    for (let k = 0; k < n; k++) if (!placed[order[k]]) missing.push(order[k]);
+    let m = 0;
     for (const s of this.slots) {
-      if (!missing.length) break;
-      if (s.next < 0 && (s.source < 0 || !wanted.has(s.source))) s.next = missing.shift()!;
+      if (m >= missing.length) break;
+      if (s.next < 0 && (s.source < 0 || !wanted[s.source])) s.next = missing[m++];
     }
 
     const step = dt * STATIC_LIGHT_TUNING.fadeRate;
