@@ -1,8 +1,14 @@
 import { Vector3 } from 'three';
 import { BOX_SIGNS, OPPOSITE, SIDE_VERTS, partnerVertex } from './geometry';
 import type {
-  DoorData, KeyColor, KeyData, LevelData, ReactorData, LightData, PickupData, PickupKind, RobotData, RobotType, SegmentData, TargetData, Vec3,
+  DoorData, KeyColor, LevelTheme, KeyData, LevelData, ReactorData, LightData, PickupData, PickupKind, RobotData, RobotType, SegmentData, TargetData, Vec3,
 } from './types';
+
+/** A reactor pylon in a segment of its own (e.g. a neighbouring room cell). */
+export interface PylonPlacement {
+  segment: number;
+  offset?: Vec3;
+}
 
 export interface ExtrudeOptions {
   /** Distance the new face is pushed out along the side's outward normal. */
@@ -29,6 +35,7 @@ export class LevelBuilder {
   private readonly targets: TargetData[] = [];
   private readonly robots: RobotData[] = [];
   private reactorData: ReactorData | null = null;
+  private themeData: LevelTheme | undefined;
 
   addBox(center: Vec3, size: Vec3, color: number): number {
     const verts = BOX_SIGNS.map(([sx, sy, sz]) =>
@@ -107,12 +114,37 @@ export class LevelBuilder {
    * Places the reactor at the segment centre (plus offset), with shield
    * pylons at offsets from the reactor.
    */
-  reactor(seg: number, offset: Vec3, pylonOffsets: Vec3[], countdown: number): void {
+  reactor(seg: number, offset: Vec3, pylons: (Vec3 | PylonPlacement)[], countdown: number): void {
     const p = this.at(seg, offset);
     this.reactorData = {
       segment: seg, position: p, countdown,
-      pylons: pylonOffsets.map((o) => ({ segment: seg, position: [p[0] + o[0], p[1] + o[1], p[2] + o[2]] as Vec3 })),
+      pylons: pylons.map((o) => Array.isArray(o)
+        ? { segment: seg, position: [p[0] + o[0], p[1] + o[1], p[2] + o[2]] as Vec3 }
+        : { segment: o.segment, position: this.at(o.segment, o.offset ?? [0, 0, 0]) }),
     };
+  }
+
+  /** Optional fog and ambient colours for the level. */
+  theme(theme: LevelTheme): void {
+    this.themeData = { ...theme };
+  }
+
+  /**
+   * Links two existing segments whose faces already coincide: `side` of `a`
+   * must share its four vertices with the opposite side of `b`.
+   */
+  link(a: number, side: number, b: number): void {
+    const sa = this.segments[a], sb = this.segments[b];
+    if (sa.children[side] !== -1 || sb.children[OPPOSITE[side]] !== -1) {
+      throw new Error(`Portal ${a}:${side} → ${b} is already connected`);
+    }
+    for (const lv of SIDE_VERTS[side]) {
+      if (sa.verts[lv] !== sb.verts[partnerVertex(side, lv)]) {
+        throw new Error(`Segments ${a} and ${b} do not share side ${side}`);
+      }
+    }
+    sa.children[side] = b;
+    sb.children[OPPOSITE[side]] = a;
   }
 
   /** Marks the door on `side` of `seg` as the level exit (adds the door). */
@@ -156,6 +188,7 @@ export class LevelBuilder {
       targets: [...this.targets],
       robots: [...this.robots],
       reactor: this.reactorData,
+      ...(this.themeData ? { theme: this.themeData } : {}),
     };
   }
 
@@ -168,12 +201,14 @@ export class LevelBuilder {
     return n;
   }
 
-  private addVertex(v: Vector3): number {
+  /** Adds a vertex; returns its index. */
+  addVertex(v: Vector3): number {
     this.vertices.push(v);
     return this.vertices.length - 1;
   }
 
-  private addSegment(verts: number[], color: number): number {
+  /** Adds a segment from 8 vertex indices in the local layout of `types.ts`. */
+  addSegment(verts: number[], color: number): number {
     this.segments.push({ verts, children: [-1, -1, -1, -1, -1, -1], color });
     return this.segments.length - 1;
   }

@@ -11,6 +11,7 @@ import { Robot, type RobotWorld } from '../entities/robots/Robot';
 import { setRobotEnvironment } from '../entities/robots/RobotMeshes';
 import { Target } from '../entities/Target';
 import { GameEffects } from '../fx/GameEffects';
+import { StaticLights } from '../fx/StaticLights';
 import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
 import { MapMemory } from '../level/automap';
@@ -90,6 +91,7 @@ export class Game {
   private readonly automap: AutomapView;
   private mapOpen = false;
   private readonly viewer: MapViewer;
+  private readonly staticLights: StaticLights;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -129,17 +131,15 @@ export class Game {
     this.ship = new Ship(this.level);
     this.player = new Player(this.ship);
 
-    this.scene.background = new Color(0x020206);
-    this.scene.fog = new FogExp2(0x05040c, 0.012);
-    this.scene.add(new HemisphereLight(0x3a4466, 0x0a0812, 0.35));
+    const theme = levelData.theme;
+    this.scene.background = new Color(0x020206).lerp(new Color(theme?.fog ?? 0x020206), 0.5);
+    this.scene.fog = new FogExp2(theme?.fog ?? 0x05040c, 0.012);
+    this.scene.add(new HemisphereLight(theme?.ambient ?? 0x3a4466, 0x0a0812, 0.35));
     const meshes = buildLevelMesh(this.level);
     this.scene.add(meshes.root);
     this.segmentMeshes = meshes.segments;
-    for (const l of levelData.lights) {
-      const light = new PointLight(l.color, l.intensity * LIGHT_SCALE, l.distance, 1.4);
-      light.position.set(...l.position);
-      this.scene.add(light);
-    }
+    this.staticLights = new StaticLights(levelData.lights, LIGHT_SCALE);
+    this.scene.add(this.staticLights.object);
 
     this.doors = this.level.doors.map((d) => new Door(d));
     for (const d of this.doors) this.scene.add(d.object);
@@ -183,6 +183,9 @@ export class Game {
     this.camera.add(headlight);
     this.scene.add(this.camera);
     this.syncCamera(1);
+    // Two long steps: pick the lights near the start, then fade them fully in.
+    this.staticLights.update(1, this.camera.position);
+    this.staticLights.update(1, this.camera.position);
     this.applySettings();
     this.settings.onChange(() => this.applySettings());
     this.warmUp();
@@ -323,6 +326,7 @@ export class Game {
       this.automap.render(this.ctx, this.camera.aspect);
     } else {
       this.syncCamera(this.accumulator / STEP);
+      this.staticLights.update(dt, this.camera.position);
       for (const r of this.robots) if (r.alive) r.syncObject(this.accumulator / STEP);
       this.cull();
       this.projectileRenderer.sync(this.projectiles.projectiles);

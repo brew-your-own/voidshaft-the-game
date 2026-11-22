@@ -6,5 +6,45 @@
     "robots": 13,
     "keys": 2,
     "doors": 5
+  },
+  {
+    "id": "level02",
+    "name": "Level 02 — Cinder Lanes",
+    "segments": 59,
+    "robots": 17,
+    "keys": 3,
+    "doors": 4
+  },
+  {
+    "id": "level03",
+    "name": "Level 03 — Glasswater Depot",
+    "segments": 77,
+    "robots": 24,
+    "keys": 3,
+    "doors": 4
+  },
+  {
+    "id": "level04",
+    "name": "Level 04 — Verdant Stacks",
+    "segments": 92,
+    "robots": 29,
+    "keys": 3,
+    "doors": 4
+  },
+  {
+    "id": "level05",
+    "name": "Level 05 — Choir of Wires",
+    "segments": 111,
+    "robots": 35,
+    "keys": 3,
+    "doors": 4
+  },
+  {
+    "id": "level06",
+    "name": "Level 06 — Null Spire",
+    "segments": 132,
+    "robots": 43,
+    "keys": 3,
+    "doors": 4
   }
 ]

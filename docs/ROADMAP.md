@@ -2,14 +2,14 @@
 
 An original in-browser 6DOF tunnel shooter, inspired by Descent (1995): you fly freely through enclosed mines, fight robots, collect keys, destroy a reactor and escape before the mine collapses. The game uses no Descent names, levels or assets.
 
-_Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 10, five bigger levels._
+_Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand playtesting and tuning._
 
 ## Decisions
 
 | Area | Choice |
 |---|---|
 | Stack | Three.js, Vite and TypeScript, with our own physics and collision code (no physics engine) |
-| Scope | A vertical slice: one level with the full gameplay loop |
+| Scope | Six levels with the full gameplay loop (it started as a one-level vertical slice) |
 | Levels | Connected "cube segments" (eight-vertex deformable boxes), written in TypeScript and exported to JSON |
 | Look | Untextured flat-shaded polygons, a cyberpunk palette, lots of LED strips, bloom. Textures come later, through the material layer in `src/render/Materials.ts` |
 | Audio | Synthesised in the browser with WebAudio; no audio files |
@@ -28,8 +28,8 @@ _Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 1
 | 6 | Objective loop: reactor, countdown, escape | ✅ Done | `2a42b42` |
 | 7 | HUD, audio, menus, settings | ✅ Done | `6766f7b` |
 | 8 | Polish: performance, automap | ✅ Done | `4e47e0f` |
-| 9 | Level selector and map viewer | ✅ Done | _uncommitted_ |
-| 10 | Five bigger levels | ⏳ Next | — |
+| 9 | Level selector and map viewer | ✅ Done | `41d51bc` |
+| 10 | Five bigger levels | ✅ Done | _uncommitted_ |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
 
 ### What each milestone delivered
@@ -88,6 +88,28 @@ _Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 1
 - **Map viewer** (`src/ui/MapViewer.ts`): the whole level as a wireframe, using the automap renderer in an overview mode that frames the level's centre. It marks the start, doors (exit in green), keys, the reactor and every robot by type. Drag to turn, right-drag or Shift-drag to pan, wheel to zoom, Esc or BACK to return. It can show any level, not just the loaded one.
 - Map markers now grow when zoomed out, in the viewer and the in-game map.
 
+**10. Five bigger levels**
+- **Level list:** `level01` stays as the short first level; five new ones follow, each with its own name, colour theme (accents, fog and ambient light) and a blue → gold → red key progression, then the reactor, then the exit:
+
+  | Level | Segments | Robots | Floors | Countdown |
+  |---|---|---|---|---|
+  | 02 Cinder Lanes (amber foundry) | 59 | 17 | 2 | 50 s |
+  | 03 Glasswater Depot (cyan coolant depot) | 77 | 24 | 3 | 55 s |
+  | 04 Verdant Stacks (green hydroponic towers) | 92 | 29 | 4 | 60 s |
+  | 05 Choir of Wires (violet relay cathedral) | 111 | 35 | 2 | 70 s |
+  | 06 Null Spire (ice core round a 3-floor atrium) | 132 | 43 | 3 | 75 s |
+
+- **`GridLayout`** (`src/level/GridLayout.ts`): levels are drawn as ASCII maps, one per floor, one character per cube segment. Face-adjacent cells link automatically (except character pairs listed in `separate`), so rooms are blocks of cells and loops come for free; doors go on "the only portal between character X and Y". Cells share lattice vertices, so they can't overlap. A random shear (`warp`) makes floors ramp and walls lean while every face stays a flat parallelogram: each coordinate's offset is a sum of functions of the other two lattice indices.
+- **Shared parts** (`src/level/levels/parts.ts`): the reactor chamber and the exit tunnel are extruded off the grid; robots, pickups and lights are placed by grid cell. `LevelBuilder` gained `link()`, `theme()` and pylons in other segments.
+- **Fixed-light pool** (`src/fx/StaticLights.ts`): the scene always has 12 point lights for the level's fixed lights; each frame the lights whose range reaches closest to the camera get a slot, fading out and in when a slot changes light. Lighting cost no longer grows with level size, and the light count stays constant. `level01` has 11 lights, so it is unchanged.
+- **Tests** (`tests/levels.test.ts`, run on every level):
+  - solvability (`src/level/progression.ts`): starting with no keys and flying only through doors you can open, every key is reachable, then the reactor, then the exit, and the exit is sealed until then. The new levels must take exactly blue, gold, red, with the reactor only after red;
+  - faces are flat, segment centres resolve to their own segment, and no two segments overlap;
+  - every robot, key, pickup, the reactor, its pylons, the start and every light sit inside their segment, clear of the walls;
+  - each new level is bigger than `level01`, has at least 3 loops and a theme, and the list grows in size.
+- **Measured** on Null Spire in the browser pane: 63 draw calls and 24 visible segments in the atrium, about 1 ms of CPU per frame; the simulation costs about 0.11 ms per step with 40 robots.
+- Grid cells are small, so lights placed through `parts.lights()` are scaled down (`GRID_LIGHT_SCALE`); pale accents (ice, white) need lower intensities still, or the walls wash out under bloom.
+
 **11. Enemy ship designs** (done before 10)
 - Nine proposals, three per robot type, were compared on a turntable page. The picks:
   - **Stinger, "Mantis":** needle body with two mandible blades sweeping forward past the nose like pincers, LEDs along the blade edges, red eye slit.
@@ -101,24 +123,10 @@ _Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 1
 
 ## Next
 
-### 10. Five bigger levels
+### Candidates
 
-- Five levels in increasing size and difficulty, each larger than `level01` (32 segments), up to roughly 100–150 segments for the last one.
-- Each level gets:
-  - its own colour theme and name;
-  - a key progression (blue → gold → red);
-  - a reactor and an exit;
-  - loops and side branches, so the layout isn't one long corridor.
-- **Decision to make:** keep `level01` as the first level, or turn it into a short training level.
-- **Tooling:**
-  - `LevelBuilder` helpers for rooms, junctions and loops, so big levels stay readable;
-  - a solvability test for every level: starting with no keys, flying only through doors you can open, you must reach every key, then the reactor, then the exit;
-  - tests that every robot, pickup and light sits inside its segment with clearance from the walls.
-- **Performance:** check draw calls and culling on the biggest level.
-
-### Other candidates
-
-- Hand playtesting and tuning (see below).
+- Hand playtesting and tuning (see below), now across six levels: robot counts, pickups and countdowns per level are first guesses.
+- A level-complete flow: winning currently ends on the end screen; going on to the next level is a reload from the title screen.
 - Textures, through `src/render/Materials.ts`.
 - Baked static lighting (see below), if the game runs slowly on high-resolution screens or weak GPUs.
 
@@ -145,17 +153,20 @@ _Status as of 2026-11-22: milestones 1–9 and 11 are done, on `master`. Next: 1
 - **The automap pauses the countdown,** which makes the escape easier: you can stop and plan the route. Change this if it feels like cheating.
 - **ESLint and Prettier** were in the original scaffold plan but were never set up.
 - **Textures:** not started, as decided.
+- **New levels unplayed by hand:** they pass the solvability and placement tests and were flown with scripted runs, but nobody has played them through. Light levels were tuned from a few screenshots only.
+- **Grid look:** the grid levels are blockier than `level01`'s hand-extruded tunnels (the shear helps). Mixing in more extruded side tunnels and rooms would add variety.
+- **Light pool popping:** in a big level a distant room can lose its lamp when 12 closer lights win the slots; it fades rather than pops, but it may be visible in long sight lines.
 
 ## Working on it
 
 ```bash
 npm install
 npm run dev      # dev server (5173, or the next free port)
-npm test         # 67 Vitest tests over 9 files
+npm test         # Vitest tests over 11 files
 npm run build    # exports levels, type-checks, builds to dist/
 ```
 
-- Levels are authored in `src/level/levels/*.ts`; run `npm run levels` after editing one.
+- Levels are authored in `src/level/levels/*.ts` (the new ones as `GridLayout` maps); run `npm run levels` after editing one.
 - `?level=<id>` loads a different level.
 - In dev, `window.game` exposes debug hooks: `debugFly`, `debugGiveKey`, `debugRobots`, `debugReactor` and `debugObjective`.
 - `/shipyard.html` shows the robot models on turntables, for reviewing designs.

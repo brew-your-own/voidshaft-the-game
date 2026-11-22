@@ -77,6 +77,14 @@ export interface ReactorData {
   countdown: number;
 }
 
+/** Per-level atmosphere. */
+export interface LevelTheme {
+  /** Fog and background tint. */
+  fog: number;
+  /** Sky colour of the ambient hemisphere light. */
+  ambient: number;
+}
+
 export interface LevelData {
   name: string;
   vertices: Vec3[];
@@ -89,4 +97,5 @@ export interface LevelData {
   targets: TargetData[];
   robots: RobotData[];
   reactor: ReactorData | null;
+  theme?: LevelTheme;
 }

@@ -11,6 +11,11 @@ export const PALETTE = {
   white: 0xdfe8ff,
   gold: 0xffc400,
   blue: 0x2e7bff,
+  orange: 0xff5a1f,
+  teal: 0x00ffb0,
+  ice: 0x9fd8ff,
+  rose: 0xff6e9c,
+  acid: 0xc8ff00,
   /** Base colour of wall panels. */
   wall: 0x1a1d2b,
 } as const;
