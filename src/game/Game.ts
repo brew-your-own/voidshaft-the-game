@@ -357,6 +357,11 @@ export class Game {
     this.input.flushPresses();
     if (this.mapOpen) {
       this.steerMap(dt);
+      // The ship and robots hold still, but the escape clock keeps running:
+      // studying the map costs time.
+      if (locked) this.updateMission(dt);
+      // Out of time: close the map so the collapse is seen.
+      if (this.objective.over) this.toggleMap();
     } else if (locked && this.endTimer < END_DELAY) {
       const { dx, dy } = this.input.consumeMouse();
       this.input.consumeWheel();
@@ -417,7 +422,10 @@ export class Game {
     requestAnimationFrame(this.frame);
   };
 
-  /** Opens or closes the automap. The game is paused while it is open. */
+  /**
+   * Opens or closes the automap. The ship, robots and projectiles freeze while
+   * it is open; the mission clock (the escape countdown) does not.
+   */
   private toggleMap(): void {
     this.mapOpen = !this.mapOpen;
     this.input.consumeMouse();

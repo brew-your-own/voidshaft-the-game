@@ -81,7 +81,7 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 - **Resolution:** a Resolution setting (50–100% of native, capped at 2× pixel ratio) and an adaptive mode, on by default, that lowers the resolution in 10% steps when frames run slower than about 50 fps and slowly raises it again (`src/render/Resolution.ts`).
 - **Telemetry** now shows CPU time per frame, draw calls, triangles and the current resolution. The HUD skips text writes that didn't change.
 - **Bundle:** Three.js is split into two cacheable chunks; the game code is 89 kB, and the build no longer warns.
-- **Automap** (Tab, rebindable): a wireframe of every segment you have seen, in each segment's accent colour, with doors in their key colour, the exit (red when sealed, green when open), uncollected keys, the reactor and your ship. The mouse turns the view around the ship; the wheel or the forward/back keys zoom. The game is paused while the map is open, including the escape countdown.
+- **Automap** (Tab, rebindable): a wireframe of every segment you have seen, in each segment's accent colour, with doors in their key colour, the exit (red when sealed, green when open), uncollected keys, the reactor and your ship. The mouse turns the view around the ship; the wheel or the forward/back keys zoom. The ship and robots freeze while the map is open, but the escape countdown keeps running; if it runs out, the map closes on the collapse.
 
 **9. Level selector and map viewer**
 - `npm run levels` also writes `public/levels/index.json`: each level's id, name and counts, in the order of `LEVEL_SOURCES`.
@@ -158,7 +158,6 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 - **Resuming right after Esc:** browsers refuse to recapture the mouse for about a second after Esc, so a quick click on RESUME can fail and has to be repeated.
 - **Robots can't use doors,** so a closed door shuts them out. This is intended for now.
 - **Performance on real hardware** is unmeasured: the numbers above come from the browser pane at 1024×768. Adaptive resolution assumes a 60 Hz or faster display; on a slower display it would drop to 50%, so turn it off there.
-- **The automap pauses the countdown,** which makes the escape easier: you can stop and plan the route. Change this if it feels like cheating.
 - **ESLint and Prettier** were in the original scaffold plan but were never set up.
 - **Textures:** not started, as decided.
 - **New levels unplayed by hand:** they pass the solvability and placement tests and were flown with scripted runs, but nobody has played them through. Light levels were tuned from a few screenshots only.

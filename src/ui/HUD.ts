@@ -13,7 +13,7 @@ export interface HudState {
   /** Render resolution as a fraction of native. */
   resolution: number;
   locked: boolean;
-  /** The automap is open (game paused). */
+  /** The automap is open (the ship and robots freeze, the countdown runs). */
   automap: boolean;
   levelName: string;
   keys: KeyColor[];
