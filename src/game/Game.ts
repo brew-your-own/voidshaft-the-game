@@ -18,7 +18,7 @@ import { hitFlashStrength } from '../render/HitFlashPass';
 import { distanceToTris } from '../physics/Collision';
 import { Input, type FlightControls } from '../input/Input';
 import { MapMemory } from '../level/automap';
-import { LEVEL_STORAGE_KEY, type LevelSummary } from '../level/levelIndex';
+import { LAUNCH_PARAM, LEVEL_STORAGE_KEY, nextLevel, type LevelSummary } from '../level/levelIndex';
 import { loadLevel } from '../level/LevelLoader';
 import { Level, type DoorState } from '../level/Level';
 import { buildLevelMesh } from '../level/LevelMesh';
@@ -111,7 +111,7 @@ export class Game {
     canvas: HTMLCanvasElement,
     hudRoot: HTMLElement,
     levelData: LevelData,
-    levels: { list: LevelSummary[]; current: string } = { list: [], current: 'level01' },
+    private readonly levels: { list: LevelSummary[]; current: string; launch?: boolean } = { list: [], current: 'level01' },
   ) {
     this.ctx = createRenderer(canvas, this.scene, this.camera);
     // Robot hulls reflect a neon room; level walls are unaffected.
@@ -128,12 +128,7 @@ export class Game {
         this.audio.unlock();
         this.audio.play('uiClick');
       },
-      onSelectLevel: (id) => {
-        try { localStorage.setItem(LEVEL_STORAGE_KEY, id); } catch { /* storage blocked */ }
-        const url = new URL(window.location.href);
-        url.searchParams.set('level', id);
-        window.location.assign(url);
-      },
+      onSelectLevel: (id) => this.goToLevel(id, false),
       onViewMap: (id) => this.openViewer(id, levels.current === id ? levelData : null),
       onViewEnemies: () => {
         this.menu.hide();
@@ -141,6 +136,8 @@ export class Game {
         this.enemies.open();
       },
     }, levels);
+    // Arrived by going on from the previous level: skip the title screen.
+    if (levels.launch) this.menu.show('launch');
     this.viewer = new MapViewer(hudRoot, canvas, () => {
       hudRoot.classList.remove('viewer');
       this.menu.show('main');
@@ -322,7 +319,20 @@ export class Game {
       return;
     }
     if (this.objective.over) return;
-    this.menu.show(this.started ? 'pause' : 'main');
+    this.menu.show(this.started ? 'pause' : this.levels.launch ? 'launch' : 'main');
+  }
+
+  /**
+   * Loads another level by reloading the page on it, remembering the choice
+   * for next time. `launch` opens it on the launch screen instead of the title.
+   */
+  private goToLevel(id: string, launch: boolean): void {
+    try { localStorage.setItem(LEVEL_STORAGE_KEY, id); } catch { /* storage blocked */ }
+    const url = new URL(window.location.href);
+    url.searchParams.set('level', id);
+    if (launch) url.searchParams.set(LAUNCH_PARAM, '1');
+    else url.searchParams.delete(LAUNCH_PARAM);
+    window.location.assign(url);
   }
 
   start(): void {
@@ -602,24 +612,36 @@ export class Game {
 
   private showEndScreen(): void {
     const o = this.objective;
+    const won = o.state === 'won';
     const time = `${Math.floor(o.elapsed / 60)}:${String(Math.floor(o.elapsed % 60)).padStart(2, '0')}`;
     const subtitles = {
       'out-of-ships': 'All ships lost.',
       collapse: 'The mine collapsed before you got out.',
       caught: 'Your ship was destroyed during the escape.',
     };
+    const next = won ? nextLevel(this.levels.list, this.levels.current) : null;
+    const last = won && !next;
+    const first = this.levels.list[0]?.id;
+    const replay = () => this.goToLevel(this.levels.current, true);
     this.hud.showEnd({
-      won: o.state === 'won',
-      title: o.state === 'won' ? 'MINE CLEARED' : 'MISSION FAILED',
-      subtitle: o.state === 'won'
-        ? `Escaped with ${o.timeLeft.toFixed(1)} s to spare.`
+      won,
+      title: last ? 'ALL MINES CLEARED' : won ? 'MINE CLEARED' : 'MISSION FAILED',
+      subtitle: won
+        ? `Escaped with ${o.timeLeft.toFixed(1)} s to spare.${last ? ' That was the last mine.' : ''}`
         : subtitles[o.lossReason ?? 'out-of-ships'],
       stats: [
         ['TIME', time],
         ['KILLS', String(o.kills)],
         ['SHIPS LOST', String(o.deaths)],
       ],
-    }, () => window.location.reload());
+      prompt: next
+        ? `Click or press Enter for the next mine: ${next.name.replace(/^Level \d+ — /, '')}`
+        : last ? 'Click or press Enter to return to the title screen' : 'Click or press Enter to try again',
+    }, next
+      ? { primary: () => this.goToLevel(next.id, true), replay }
+      : last
+        ? { primary: () => (first ? this.goToLevel(first, false) : window.location.reload()), replay }
+        : { primary: replay });
     this.menu.hide();
     if (document.pointerLockElement) document.exitPointerLock();
   }

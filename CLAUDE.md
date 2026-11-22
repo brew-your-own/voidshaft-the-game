@@ -4,7 +4,7 @@ An original browser-based 6DOF tunnel shooter inspired by Descent (1995), built 
 
 ## Where we are
 
-Milestones 1–12 are done: six levels, `level01` plus five bigger grid-built ones. Next is hand playtesting and tuning. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
+Milestones 1–13 are done: six levels, `level01` plus five bigger grid-built ones. Next is hand playtesting and tuning. Gamepad support is out of scope. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan, what each milestone delivered and the known gaps. **Update ROADMAP.md (status table, "Next", known gaps) whenever a milestone lands.**
 
 ## Commands
 
@@ -36,7 +36,7 @@ Levels 02–06 are `GridLayout` maps: one string array per floor, one character 
 | `src/render/` | Renderer and bloom (with resolution scaling), `HitFlashPass` (damage vignette and colour fringe), adaptive `ResolutionGovernor`, palette, materials, `WallDetail` (procedural plate seams, rivets, vents, glowing seams and hazard stripes on walls, fed by attributes from `level/wallPanels.ts`), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
 | `src/shipyard/`, `shipyard.html` | Dev-only turntable page for robot models and proposals |
 | `src/soundlab/`, `soundlab.html` | Dev-only page to audition sound variants and tune bass and reverb |
-| `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (title screen with the level list, pause, settings, controls), `MapViewer` (whole-level map from the title screen), `EnemyViewer` (robot turntable and stats from the title screen) |
+| `src/ui/` | `HUD` (DOM overlay, end screen with next level / replay), `Menu` (title screen with the level list, launch screen for the next level, pause, settings, controls), `MapViewer` (whole-level map from the title screen), `EnemyViewer` (robot turntable and stats from the title screen) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
 | `tools/buildLevels.ts` | Level JSON exporter |

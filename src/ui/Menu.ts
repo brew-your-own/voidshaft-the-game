@@ -1,7 +1,7 @@
 import { ACTION_LABELS, keyName, type Action, type Settings, type SettingsData } from '../game/Settings';
-import type { LevelSummary } from '../level/levelIndex';
+import { levelNumber, type LevelSummary } from '../level/levelIndex';
 
-export type MenuScreen = 'main' | 'pause' | 'settings' | 'controls';
+export type MenuScreen = 'main' | 'pause' | 'settings' | 'controls' | 'launch';
 
 export interface MenuCallbacks {
   /** Start or resume flying (called inside the click, so it can capture the mouse). */
@@ -113,6 +113,24 @@ export class Menu {
             <p class="version">${escapeHtml(__APP_VERSION__)}</p>
           </div>`;
         break;
+      case 'launch': {
+        // Reached by going on from the previous level: one press to fly.
+        const { list, current } = this.levels;
+        const level = list.find((l) => l.id === current);
+        const n = levelNumber(list, current);
+        this.root.innerHTML = `
+          <div class="panel launch">
+            <p class="count">${n ? `MINE ${n} / ${list.length}` : 'NEXT MINE'}</p>
+            <h1>${escapeHtml(level?.name.replace(/^Level \d+ — /, '') ?? current)}</h1>
+            ${level ? `<p class="mission">${level.segments} segments · ${level.robots} robots · ${level.keys} keys</p>` : ''}
+            <nav>
+              <button data-act="play" class="primary">LAUNCH</button>
+              <button data-go="main">TITLE SCREEN</button>
+            </nav>
+            <p class="hint">Click LAUNCH or press Enter</p>
+          </div>`;
+        break;
+      }
       case 'pause':
         this.root.innerHTML = `
           <div class="panel">
@@ -248,6 +266,11 @@ export class Menu {
     }
     if (e.code === 'Escape' && (this.screen === 'settings' || this.screen === 'controls')) {
       this.show(this.parent);
+    } else if (this.screen === 'launch' && (e.code === 'Enter' || e.code === 'Space')) {
+      // A key press counts as a user gesture, so the mouse can be captured here.
+      e.preventDefault();
+      this.cb.onClick();
+      this.cb.onPlay();
     }
   }
 }

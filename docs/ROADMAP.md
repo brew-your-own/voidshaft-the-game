@@ -2,7 +2,7 @@
 
 An original in-browser 6DOF tunnel shooter, inspired by Descent (1995): you fly freely through enclosed mines, fight robots, collect keys, destroy a reactor and escape before the mine collapses. The game uses no Descent names, levels or assets.
 
-_Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand playtesting and tuning._
+_Status as of 2026-11-22: milestones 1–13 are done, on `main`. Next: hand playtesting and tuning._
 
 ## Decisions
 
@@ -32,6 +32,7 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 | 10 | Five bigger levels | ✅ Done | `5bffdc9` |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
 | 12 | Juice: escape sequence, wall detail, explosions, heavier sound | ✅ Done | `1faabf5` |
+| 13 | Going on to the next level | ✅ Done | (this commit) |
 
 ### What each milestone delivered
 
@@ -129,12 +130,17 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 - **Sound:** a bass shelf and a synthetic reverb on the effects bus (`AUDIO_TUNING`), a `drive()` distortion helper, and new laser (Pulse blaster), explosion (Thunder) and hit (Hull clang) sounds. The hit sound follows the damage taken. The escape alarm is a low air-raid wail with a dark choir (Am → Dm → E → Am, one chord per blast) and a klaxon an octave below the original, replacing the high 700 Hz siren. The picks were made on `/soundlab.html` (dev server only), which plays every variant in `src/audio/variants.ts` and has bass and reverb sliders.
 - **Even glow:** LEDs used to be driven at 2× their colour, so bright hues (lime, acid, white) bloomed hard and washed out level04 and level06, while violet, magenta and red never bloomed. LEDs are now driven to the same HDR luminance whatever the hue (`ledGlow`, `GLOW_TUNING` in `palette.ts`), and bloom fades in over a wide knee above its threshold (`BLOOM_TUNING` in `Renderer.ts`) instead of switching on. The start views of all six levels now measure 85–110 mean brightness (was 27–182).
 
+**13. Going on to the next level**
+- After a win, the end screen offers the next mine in title-screen order (click or Enter), or R to replay this one. After the last mine it reads "ALL MINES CLEARED" and goes back to the title screen. After a loss, click or Enter tries the level again.
+- Going on reloads the page on the next level with a one-shot `?launch=1`, which opens a launch screen ("MINE 3 / 6", name, size, LAUNCH) instead of the title screen. The browser only captures the mouse after a click or key press, so this one press can't be skipped. Enter works there too. The choice is stored, so the title screen remembers where you got to.
+- Nothing carries over between levels: each starts with full ships, shield, energy and missiles.
+
 ## Next
 
 ### Candidates
 
 - Hand playtesting and tuning (see below), now across six levels: robot counts, pickups and countdowns per level are first guesses.
-- A level-complete flow: winning currently ends on the end screen; going on to the next level is a reload from the title screen.
+- Carrying ships, or a score, from one level to the next, if a run through all six should feel like a campaign.
 - Textures, through `src/render/Materials.ts`.
 - Baked static lighting (see below), if the game runs slowly on high-resolution screens or weak GPUs.
 

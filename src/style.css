@@ -92,7 +92,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
 .end dl { display: grid; grid-template-columns: auto auto; gap: 6px 24px; margin: 0 auto 18px; width: max-content; font-size: 14px; }
 .end dt { text-align: left; color: #b9c6ff; text-shadow: none; }
 .end dd { margin: 0; text-align: right; }
-.end p { margin: 0; animation: blink 1.2s steps(2) infinite; }
+.end p { margin: 0; }
+.end .prompt { animation: blink 1.2s steps(2) infinite; }
+.end .alt { margin-top: 8px; font-size: 12px; letter-spacing: 0.15em; color: #b9c6ff; text-shadow: none; }
+.end .alt:empty { display: none; }
 
 /* ---- HUD extras ---- */
 #hud.paused .crosshair, #hud.paused .missile-warning { display: none; }
@@ -127,6 +130,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020206; }
   padding: 28px 36px; min-width: 320px; max-width: 100%; max-height: 100%; overflow-y: auto; text-align: center;
 }
 .menu .panel.wide { width: 560px; }
+.menu .launch .count { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.35em; color: #b9c6ff; text-shadow: none; }
+.menu .launch h1 { font-size: 26px; letter-spacing: 0.25em; }
 .menu h1 { margin: 0 0 8px; color: var(--neon-2); letter-spacing: 0.35em; font-size: 34px; }
 .menu h2 { margin: 0 0 18px; color: var(--neon-2); letter-spacing: 0.3em; font-size: 20px; }
 .menu .tag { margin: 0 0 18px; font-size: 11px; letter-spacing: 0.25em; color: #b9c6ff; text-shadow: none; }

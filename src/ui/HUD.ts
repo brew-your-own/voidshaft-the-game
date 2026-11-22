@@ -45,6 +45,15 @@ export interface EndScreen {
   title: string;
   subtitle: string;
   stats: [string, string][];
+  /** What a click or Enter does, e.g. "Click or press Enter to play again". */
+  prompt: string;
+}
+
+export interface EndActions {
+  /** Click, Enter or Space. */
+  primary(): void;
+  /** R, when offered (replay this level after a win). */
+  replay?(): void;
 }
 
 /** Ignore input this long after the end screen appears. */
@@ -94,7 +103,7 @@ export class HUD {
           ${KEY_SLOTS.map((k) => `<li style="--c:${k.css}">◆ ${k.color} key / door</li>`).join('')}
         </ul>
       </div>
-      <div class="end"><h1></h1><h2></h2><dl></dl><p>Click or press Enter to play again</p></div>`;
+      <div class="end"><h1></h1><h2></h2><dl></dl><p class="prompt"></p><p class="alt"></p></div>`;
     this.telemetry = root.querySelector('.telemetry')!;
     this.crosshair = root.querySelector('.crosshair')!;
     this.warningEl = root.querySelector('.missile-warning')!;
@@ -125,20 +134,26 @@ export class HUD {
 
   /**
    * Shows the win/lose screen. After a short delay (so a held fire button
-   * doesn't skip it), any click or Enter/Space runs `onRestart`. Listening
-   * on the window works whether or not the mouse is still captured and
-   * wherever the cursor reappears.
+   * doesn't skip it), any click or Enter/Space runs `actions.primary`, and R
+   * runs `actions.replay` if given. Listening on the window works whether or
+   * not the mouse is still captured and wherever the cursor reappears.
    */
-  showEnd(end: EndScreen, onRestart: () => void): void {
+  showEnd(end: EndScreen, actions: EndActions): void {
     const el = this.endEl;
     el.classList.toggle('won', end.won);
     el.querySelector('h1')!.textContent = end.title;
     el.querySelector('h2')!.textContent = end.subtitle;
     el.querySelector('dl')!.innerHTML = end.stats.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    el.querySelector('.prompt')!.textContent = end.prompt;
+    el.querySelector('.alt')!.textContent = actions.replay ? 'R to replay this mine' : '';
     el.classList.add('visible');
     let done = false;
-    const restart = () => { if (!done) { done = true; onRestart(); } };
-    const onKey = (e: KeyboardEvent) => { if (e.code === 'Enter' || e.code === 'Space') restart(); };
+    const run = (action: () => void) => { if (!done) { done = true; action(); } };
+    const restart = () => run(actions.primary);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Enter' || e.code === 'Space') restart();
+      else if (e.code === 'KeyR' && actions.replay) run(actions.replay);
+    };
     window.setTimeout(() => {
       window.addEventListener('mousedown', restart);
       window.addEventListener('keydown', onKey);

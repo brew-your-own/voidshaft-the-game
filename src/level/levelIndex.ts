@@ -34,6 +34,20 @@ export function chooseLevel(param: string | null, stored: string | null, index: 
   return index[0]?.id ?? 'level01';
 }
 
+/** URL parameter marking a level reached by going on from the previous one (shows the launch screen). */
+export const LAUNCH_PARAM = 'launch';
+
+/** The level after `current` in index order, or null after the last (or for a level not in the index). */
+export function nextLevel(index: readonly LevelSummary[], current: string): LevelSummary | null {
+  const i = index.findIndex((l) => l.id === current);
+  return i >= 0 && i + 1 < index.length ? index[i + 1] : null;
+}
+
+/** 1-based position of `current` in the index, or 0 if it isn't listed. */
+export function levelNumber(index: readonly LevelSummary[], current: string): number {
+  return index.findIndex((l) => l.id === current) + 1;
+}
+
 /** Parses index.json, dropping malformed rows. */
 export function parseLevelIndex(raw: unknown): LevelSummary[] {
   if (!Array.isArray(raw)) return [];

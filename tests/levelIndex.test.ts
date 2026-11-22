@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseLevel, parseLevelIndex, summarizeLevel, type LevelSummary } from '../src/level/levelIndex';
+import { chooseLevel, levelNumber, nextLevel, parseLevelIndex, summarizeLevel, type LevelSummary } from '../src/level/levelIndex';
 import { LEVEL_SOURCES } from '../src/level/levels';
 
 const row = (id: string): LevelSummary => ({ id, name: id, segments: 1, robots: 0, keys: 0, doors: 0 });
@@ -29,5 +29,15 @@ describe('level index', () => {
     expect(parseLevelIndex(null)).toEqual([]);
     expect(parseLevelIndex({ id: 'a' })).toEqual([]);
     expect(parseLevelIndex([row('a'), { id: 'b' }, 7, null])).toEqual([row('a')]);
+  });
+
+  it('finds the next level in index order', () => {
+    const index = [row('a'), row('b'), row('c')];
+    expect(nextLevel(index, 'a')?.id).toBe('b');
+    expect(nextLevel(index, 'b')?.id).toBe('c');
+    expect(nextLevel(index, 'c')).toBeNull();
+    expect(nextLevel(index, 'zzz')).toBeNull();
+    expect(levelNumber(index, 'b')).toBe(2);
+    expect(levelNumber(index, 'zzz')).toBe(0);
   });
 });
