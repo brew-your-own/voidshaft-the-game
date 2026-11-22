@@ -1,8 +1,9 @@
-import { Vector3 } from 'three';
+import { Color, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CameraShake, SHAKE_TUNING, damageTrauma, explosionTrauma, smoothNoise } from '../src/fx/CameraShake';
 import { DEBRIS_TUNING, DebrisPool } from '../src/fx/Debris';
 import { HIT_FLASH_TUNING, hitFlashStrength } from '../src/render/HitFlashPass';
+import { GLOW_TUNING, PALETTE, ledGlow, luminance } from '../src/render/palette';
 
 describe('CameraShake', () => {
   it('is still with no trauma', () => {
@@ -213,5 +214,18 @@ describe('shockwave near fade', () => {
     expect(nearFade(6, 2)).toBe(1);
     expect(nearFade(4, 2)).toBeGreaterThan(0);
     expect(nearFade(4, 2)).toBeLessThan(1);
+  });
+});
+
+describe('ledGlow', () => {
+  it('drives every hue to the same LED luminance, capping the boost for dark hues', () => {
+    for (const hex of [PALETTE.acid, PALETTE.lime, PALETTE.cyan, PALETTE.magenta, PALETTE.violet, PALETTE.blue, PALETTE.red, PALETTE.amber, PALETTE.white]) {
+      expect(luminance(ledGlow(hex))).toBeCloseTo(GLOW_TUNING.ledLuminance, 5);
+    }
+    // Hue is kept: only the strength changes.
+    const lime = new Color(PALETTE.lime), glow = ledGlow(PALETTE.lime);
+    expect(glow.r / glow.g).toBeCloseTo(lime.r / lime.g, 5);
+    expect(luminance(ledGlow(0x101018))).toBeCloseTo(luminance(new Color(0x101018)) * GLOW_TUNING.maxGain, 5);
+    expect(luminance(ledGlow(PALETTE.cyan, 1.3))).toBeCloseTo(GLOW_TUNING.ledLuminance * 1.3, 5);
   });
 });

@@ -1,7 +1,7 @@
 import { Color, Group, Mesh, Vector3 } from 'three';
 import { GeometrySink, mulberry32 } from '../render/GeometrySink';
 import { createLedMaterial, createWallMaterial } from '../render/Materials';
-import { PALETTE } from '../render/palette';
+import { ledGlow, PALETTE } from '../render/palette';
 import { WALL_DETAIL_TUNING, WALL_KIND } from '../render/WallDetail';
 import { bilerp } from './geometry';
 import type { Level, Segment } from './Level';
@@ -11,7 +11,8 @@ const PANEL_SIZE = 2.6;
 const PANEL_INSET = 0.1; // fraction of panel size used for the bevel
 const PANEL_RAISE = 0.07; // how far panels stick out of the wall
 const LED_WIDTH = 0.1;
-const LED_GLOW = 2.0;
+/** LED dots glow a little hotter than the strips. */
+const DOT_BOOST = 1.3;
 const DOT_CHANCE = 0.1;
 
 export interface LevelMeshes {
@@ -26,7 +27,7 @@ export function buildLevelMesh(level: Level): LevelMeshes {
   // Separate stream so the detail seeds don't change the panel shades and LED dots.
   const detailRng = mulberry32(4242);
   const base = new Color(PALETTE.wall);
-  const white = new Color(PALETTE.white);
+  const white = ledGlow(PALETTE.white, DOT_BOOST);
   const wallMaterial = createWallMaterial();
   const ledMaterial = createLedMaterial();
   const root = new Group();
@@ -36,9 +37,11 @@ export function buildLevelMesh(level: Level): LevelMeshes {
     const walls = new WallSink();
     const leds = new GeometrySink();
     const accent = new Color(seg.color);
+    const led = ledGlow(accent);
+    const dot = ledGlow(accent, DOT_BOOST);
     seg.sides.forEach((side, s) => {
       if (!side.isWall) return;
-      const wall: WallContext = { walls, leds, rng, detailRng, base, accent, white, doorEdges: doorEdges(level, seg.index, s) };
+      const wall: WallContext = { walls, leds, rng, detailRng, base, accent, led, dot, white, doorEdges: doorEdges(level, seg.index, s) };
       buildWall(seg, side.quad, wall);
     });
     const group = new Group();
@@ -58,13 +61,17 @@ interface WallContext {
   detailRng: () => number;
   base: Color;
   accent: Color;
+  /** LED strip and dot colours: the accent at an even HDR luminance (ledGlow). */
+  led: Color;
+  dot: Color;
+  /** White LED dot colour. */
   white: Color;
   /** Edges of this wall that border a door portal (hazard stripes). */
   doorEdges: number[];
 }
 
 function buildWall(seg: Segment, q: Vector3[], ctx: WallContext): void {
-  const { walls, leds, rng, detailRng, base, accent, white } = ctx;
+  const { walls, leds, rng, detailRng, base, accent, led, dot: dotColor, white } = ctx;
   const inside = seg.center;
   const lenU = (q[0].distanceTo(q[1]) + q[3].distanceTo(q[2])) / 2;
   const lenV = (q[0].distanceTo(q[3]) + q[1].distanceTo(q[2])) / 2;
@@ -111,14 +118,12 @@ function buildWall(seg: Segment, q: Vector3[], ctx: WallContext): void {
           bilerp(q, cu - du, cv - dv), bilerp(q, cu + du, cv - dv),
           bilerp(q, cu + du, cv + dv), bilerp(q, cu - du, cv + dv),
         ].map((p) => p.addScaledVector(normal, PANEL_RAISE + 0.02));
-        const glow = (rng() < 0.6 ? accent : white).clone().multiplyScalar(LED_GLOW * 1.3);
-        leds.quad(dot[0], dot[1], dot[2], dot[3], glow, inside);
+        leds.quad(dot[0], dot[1], dot[2], dot[3], rng() < 0.6 ? dotColor : white, inside);
       }
     }
   }
 
   // LED strips along the four edges of the wall.
-  const glow = accent.clone().multiplyScalar(LED_GLOW);
   for (let k = 0; k < 4; k++) {
     const a = q[k], b = q[(k + 1) % 4];
     const along = new Vector3().subVectors(b, a);
@@ -129,6 +134,6 @@ function buildWall(seg: Segment, q: Vector3[], ctx: WallContext): void {
     const b0 = b.clone().add(lift).addScaledVector(w, 0.06);
     const a1 = a0.clone().addScaledVector(w, LED_WIDTH);
     const b1 = b0.clone().addScaledVector(w, LED_WIDTH);
-    leds.quad(a0, b0, b1, a1, glow, inside);
+    leds.quad(a0, b0, b1, a1, led, inside);
   }
 }

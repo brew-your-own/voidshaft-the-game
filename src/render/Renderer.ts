@@ -23,6 +23,15 @@ export interface RenderContext {
   readonly scale: number;
 }
 
+export const BLOOM_TUNING = {
+  strength: 0.7,
+  radius: 0.5,
+  /** HDR luminance where bloom starts. */
+  threshold: 0.92,
+  /** Luminance range over which bloom fades in above the threshold. */
+  knee: 1.0,
+};
+
 export function createRenderer(canvas: HTMLCanvasElement, scene: Scene, camera: PerspectiveCamera): RenderContext {
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.outputColorSpace = SRGBColorSpace;
@@ -34,7 +43,11 @@ export function createRenderer(canvas: HTMLCanvasElement, scene: Scene, camera: 
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
-  const bloom = new UnrealBloomPass(new Vector2(1, 1), 0.7, 0.5, 0.92);
+  const bloom = new UnrealBloomPass(new Vector2(1, 1), BLOOM_TUNING.strength, BLOOM_TUNING.radius, BLOOM_TUNING.threshold);
+  // A wide knee: pixels bloom in proportion to how far they pass the
+  // threshold. With the default (0.01) every LED just above it blooms at
+  // full strength, and LED-dense rooms flood with glow.
+  (bloom.highPassUniforms as { smoothWidth: { value: number } }).smoothWidth.value = BLOOM_TUNING.knee;
   composer.addPass(bloom);
   // After bloom, before tone mapping: works on the HDR image.
   const hitFlash = new HitFlashPass();

@@ -127,6 +127,7 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 - **Wall detail** (`src/render/WallDetail.ts`, `src/level/wallPanels.ts`): the wall material draws plate seams, rivets, vents, hazard stripes and some glowing seams procedurally, from per-vertex panel coordinates. No textures.
 - **Explosions:** pooled shockwave shells and rings (they fade near the camera so a close blast doesn't white out the screen), bouncing debris, embers, trauma-model camera shake (view-only, can be turned off in settings), and a red vignette with colour fringing when you take damage (`HitFlashPass`).
 - **Sound:** a bass shelf and a synthetic reverb on the effects bus (`AUDIO_TUNING`), a `drive()` distortion helper, and new laser (Pulse blaster), explosion (Thunder) and hit (Hull clang) sounds. The hit sound follows the damage taken. The picks were made on `/soundlab.html` (dev server only), which plays every variant in `src/audio/variants.ts` and has bass and reverb sliders.
+- **Even glow:** LEDs used to be driven at 2× their colour, so bright hues (lime, acid, white) bloomed hard and washed out level04 and level06, while violet, magenta and red never bloomed. LEDs are now driven to the same HDR luminance whatever the hue (`ledGlow`, `GLOW_TUNING` in `palette.ts`), and bloom fades in over a wide knee above its threshold (`BLOOM_TUNING` in `Renderer.ts`) instead of switching on. The start views of all six levels now measure 85–110 mean brightness (was 27–182).
 
 ## Next
 
@@ -162,7 +163,6 @@ _Status as of 2026-11-22: milestones 1–12 are done, on `main`. Next: hand play
 - **Textures:** not started, as decided.
 - **New levels unplayed by hand:** they pass the solvability and placement tests and were flown with scripted runs, but nobody has played them through. Light levels were tuned from a few screenshots only.
 - **Grid look:** the grid levels are blockier than `level01`'s hand-extruded tunnels (the shear helps). Mixing in more extruded side tunnels and rooms would add variety.
-- **Level04 green wash:** lime LEDs bloom much more than violet ones, so level04 looks washed out. LED brightness could be scaled by colour.
 - **Light pool popping:** in a big level a distant room can lose its lamp when 12 closer lights win the slots; it fades rather than pops, but it may be visible in long sight lines.
 
 ## Working on it
