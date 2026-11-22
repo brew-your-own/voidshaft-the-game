@@ -29,7 +29,7 @@ _Status as of 2026-11-22: milestones 1–11 are done, on `master`. Next: hand pl
 | 7 | HUD, audio, menus, settings | ✅ Done | `6766f7b` |
 | 8 | Polish: performance, automap | ✅ Done | `4e47e0f` |
 | 9 | Level selector and map viewer | ✅ Done | `41d51bc` |
-| 10 | Five bigger levels | ✅ Done | _uncommitted_ |
+| 10 | Five bigger levels | ✅ Done | `5bffdc9` |
 | 11 | Enemy ship designs | ✅ Done | `2e03707` |
 
 ### What each milestone delivered
