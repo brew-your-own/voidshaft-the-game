@@ -30,6 +30,36 @@ export const AUDIO_TUNING: AudioMix = {
   reverbDecay: 1.8,
 };
 
+/** The continuous bed under the escape klaxon: one or two oscillators, with an LFO on pitch and filter. */
+export interface SirenConfig {
+  type: OscillatorType;
+  /** Base pitch in Hz. */
+  freq: number;
+  /** Pitch ratio of a second voice (1.5 a fifth, 0.5 an octave down), 0 for none. */
+  second: number;
+  /** LFO swing on pitch, in Hz. */
+  depth: number;
+  /** Low-pass cutoff in Hz, and the LFO's swing on it. */
+  cutoff: number;
+  filterDepth: number;
+  q: number;
+  /** Loudness scale; 0 silences the bed. */
+  level: number;
+  /** LFO rate in Hz at urgency 0 and 1. */
+  rate: [number, number];
+}
+
+/** The escape siren: a slow, low air-raid wail (a saw at 110 Hz and its octave below). */
+export const SIREN_TUNING: SirenConfig = {
+  type: 'sawtooth', freq: 110, second: 0.5, depth: 30, cutoff: 600, filterDepth: 0, q: 1, level: 2.5, rate: [0.12, 0.5],
+};
+
+/** Escape klaxon period in seconds, calm → panic (the escape schedules blasts with it). */
+export const KLAXON_INTERVAL = [2.6, 0.9] as const;
+
+/** Seconds until the next klaxon at urgency `u`. */
+export const klaxonGap = (u: number): number => KLAXON_INTERVAL[0] + (KLAXON_INTERVAL[1] - KLAXON_INTERVAL[0]) * u;
+
 const _dir = new Vector3();
 const _right = new Vector3();
 
@@ -49,6 +79,12 @@ export class AudioEngine implements SoundSink {
   private engineOscs: OscillatorNode[] = [];
   private alarmGain!: GainNode;
   private alarmOsc!: OscillatorNode;
+  private sirenOscs: OscillatorNode[] = [];
+  private sirenDepth!: GainNode;
+  private sirenFilter!: BiquadFilterNode;
+  private sirenFilterDepth!: GainNode;
+  private siren: SirenConfig = { ...SIREN_TUNING };
+  private alarm = { on: false, urgency: 0 };
   private padFilter!: BiquadFilterNode;
   private volumes = { master: 0.8, sfx: 0.9, music: 0.5 };
   private readonly listener = new Vector3();
@@ -124,6 +160,25 @@ export class AudioEngine implements SoundSink {
     this.builtDecay = decay;
   }
 
+  /** Replaces the escape siren's sound (the sound lab auditions these). */
+  setSiren(config: Partial<SirenConfig>): void {
+    this.siren = { ...this.siren, ...config };
+    if (!this.ctx) return;
+    const sc = this.siren;
+    const t = this.ctx.currentTime;
+    this.sirenOscs.forEach((o, i) => {
+      o.type = sc.type;
+      o.frequency.setValueAtTime(i === 0 ? sc.freq : sc.freq * (sc.second || 1), t);
+    });
+    this.sirenOscs[1].disconnect();
+    if (sc.second) this.sirenOscs[1].connect(this.sirenFilter);
+    this.sirenDepth.gain.setValueAtTime(sc.depth, t);
+    this.sirenFilter.frequency.setValueAtTime(sc.cutoff, t);
+    this.sirenFilter.Q.setValueAtTime(sc.q, t);
+    this.sirenFilterDepth.gain.setValueAtTime(sc.filterDepth, t);
+    this.setAlarm(this.alarm.on, this.alarm.urgency);
+  }
+
   setListener(pos: Vector3, quat: Quaternion): void {
     this.listener.copy(pos);
     this.listenerQuat.copy(quat);
@@ -142,11 +197,13 @@ export class AudioEngine implements SoundSink {
 
   /** Escape siren; urgency 0..1 speeds it up. */
   setAlarm(on: boolean, urgency = 0): void {
+    this.alarm = { on, urgency };
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    const sc = this.siren;
     // Kept under the escape klaxon blasts, which carry the alarm.
-    this.alarmGain.gain.setTargetAtTime(on ? 0.03 + 0.04 * urgency : 0, t, 0.2);
-    this.alarmOsc.frequency.setTargetAtTime(0.8 + 2.2 * urgency, t, 0.5);
+    this.alarmGain.gain.setTargetAtTime(on ? (0.03 + 0.04 * urgency) * sc.level : 0, t, 0.2);
+    this.alarmOsc.frequency.setTargetAtTime(sc.rate[0] + (sc.rate[1] - sc.rate[0]) * urgency, t, 0.5);
     // The ambient pad darkens and tightens during the escape.
     this.padFilter.frequency.setTargetAtTime(on ? 300 : 700, t, 1);
   }
@@ -214,6 +271,35 @@ export class AudioEngine implements SoundSink {
     src.connect(f).connect(g).connect(out);
     src.start(t, Math.random() * 0.5);
     src.stop(t + dur + 0.05);
+  }
+
+  /**
+   * Sustained voice for chords: a few detuned oscillators through a low-pass
+   * that sweeps from `cut0` to `cut1`, with a linear attack and release.
+   */
+  pad(out: AudioNode, t: number, type: OscillatorType, f: number, dur: number, vol: number,
+    attack: number, release: number, cut0: number, cut1: number, detune = 8, q = 1): void {
+    const ctx = this.ctx!;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = q;
+    filter.frequency.setValueAtTime(cut0, t);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(20, cut1), t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.setValueAtTime(vol, t + Math.max(attack, dur - release));
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    filter.connect(g).connect(out);
+    for (const d of [-detune, 0, detune]) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      o.detune.value = d;
+      o.connect(filter);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
   }
 
   /**
@@ -317,22 +403,26 @@ export class AudioEngine implements SoundSink {
       return o;
     });
 
-    // Alarm siren: a square wave whose pitch is swept by a slow LFO.
-    const siren = ctx.createOscillator();
-    siren.type = 'square';
-    siren.frequency.value = 700;
+    // Alarm siren: one or two oscillators through a low-pass, with a slow LFO
+    // on their pitch and on the cutoff (see SirenConfig).
     this.alarmOsc = ctx.createOscillator();
     this.alarmOsc.frequency.value = 1;
-    const depth = ctx.createGain();
-    depth.gain.value = 180;
-    this.alarmOsc.connect(depth).connect(siren.frequency);
-    const sirenFilter = ctx.createBiquadFilter();
-    sirenFilter.type = 'lowpass';
-    sirenFilter.frequency.value = 1800;
+    this.sirenDepth = ctx.createGain();
+    this.sirenFilter = ctx.createBiquadFilter();
+    this.sirenFilter.type = 'lowpass';
+    this.sirenFilterDepth = ctx.createGain();
+    this.alarmOsc.connect(this.sirenDepth);
+    this.alarmOsc.connect(this.sirenFilterDepth).connect(this.sirenFilter.frequency);
     this.alarmGain = ctx.createGain();
     this.alarmGain.gain.value = 0;
-    siren.connect(sirenFilter).connect(this.alarmGain).connect(this.sfx);
-    siren.start();
+    this.sirenFilter.connect(this.alarmGain).connect(this.sfx);
+    this.sirenOscs = [0, 1].map(() => {
+      const o = ctx.createOscillator();
+      this.sirenDepth.connect(o.frequency);
+      o.connect(this.sirenFilter);
+      o.start();
+      return o;
+    });
     this.alarmOsc.start();
 
     // Ambient pad: detuned saws on a minor chord, slowly breathing.
@@ -357,10 +447,37 @@ export class AudioEngine implements SoundSink {
       o.connect(this.padFilter);
       o.start();
     }
+    // Last: it also applies the alarm state, which needs the pad filter.
+    this.setSiren({});
   }
 }
 
 export type Recipe = (a: AudioEngine, out: AudioNode, t: number, scale: number) => void;
+
+/** Pitch in Hz, in semitones above A1 (55 Hz). */
+export const note = (semi: number): number => 55 * Math.pow(2, semi / 12);
+
+/** The escape choir's progression, Am → Dm → E → Am, in semitones above A1; one chord per klaxon. */
+const CHOIR_CHORDS = [[0, 3, 7], [5, 8, 12], [7, 11, 14], [0, 3, 7]];
+let choirStep = 0;
+
+/** Dark "ahh" voices on the next chord of the escape progression, over a sub. */
+export const choirBlast: Recipe = (a, o, t, u) => {
+  const dur = klaxonGap(u) * 0.95;
+  const k = 0.75 + 0.25 * u;
+  const chord = CHOIR_CHORDS[choirStep++ % CHOIR_CHORDS.length];
+  for (const s of chord) a.formant(o, t, note(s + 12), dur, 0.12 * k, [650, 1050], [600, 950]);
+  a.tone(o, t, 'sine', note(chord[0] - 12), note(chord[0] - 12), dur, 0.6 * k, 0.05);
+};
+
+/** Two-tone klaxon blast; `pitch` and `gain` scale the original (330 Hz) one. */
+export function klaxonBlast(a: AudioEngine, o: AudioNode, t: number, u: number, pitch: number, gain: number): void {
+  const lo = (330 + 90 * u) * pitch;
+  const dur = 0.55 - 0.15 * u;
+  a.tone(o, t, 'square', lo, lo * 1.5, dur * 0.5, (0.07 + 0.05 * u) * gain, 0.02);
+  a.tone(o, t + dur * 0.5, 'square', lo * 1.5, lo * 1.45, dur * 0.5, (0.07 + 0.05 * u) * gain, 0.01);
+  a.tone(o, t, 'sawtooth', lo * 0.5, lo * 0.74, dur, (0.05 + 0.04 * u) * gain, 0.02);
+}
 
 const arpeggio = (a: AudioEngine, out: AudioNode, t: number, notes: number[], step: number, vol: number, type: OscillatorType = 'triangle') =>
   notes.forEach((f, i) => a.tone(out, t + i * step, type, f, f, step * 2.2, vol));
@@ -443,13 +560,11 @@ export const RECIPES: Record<SoundName, Recipe> = {
   uiClick: (a, o, t) => a.tone(o, t, 'sine', 1600, 1200, 0.04, 0.08),
   win: (a, o, t) => arpeggio(a, o, t, [392, 494, 587, 784, 988, 1175], 0.12, 0.16),
   lose: (a, o, t) => arpeggio(a, o, t, [440, 392, 330, 262, 196], 0.18, 0.18, 'sawtooth'),
-  // Escape klaxon blast; scale = urgency 0..1 (higher, harsher, louder).
+  // Escape alarm blast; scale = urgency 0..1. The choir sings the next dark
+  // chord while a klaxon, an octave below the original, sounds inside it.
   klaxon: (a, o, t, u) => {
-    const lo = 330 + 90 * u;
-    const dur = 0.55 - 0.15 * u;
-    a.tone(o, t, 'square', lo, lo * 1.5, dur * 0.5, 0.07 + 0.05 * u, 0.02);
-    a.tone(o, t + dur * 0.5, 'square', lo * 1.5, lo * 1.45, dur * 0.5, 0.07 + 0.05 * u, 0.01);
-    a.tone(o, t, 'sawtooth', lo * 0.5, lo * 0.74, dur, 0.05 + 0.04 * u, 0.02);
+    choirBlast(a, o, t, u);
+    klaxonBlast(a, o, t, u, 0.5, 2.5);
   },
   // Countdown call for the last ten seconds; scale = seconds left (pitch rises as it drops).
   countdown: (a, o, t, s) => {

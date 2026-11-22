@@ -1,19 +1,53 @@
-import { RECIPES, type Recipe, type SoundName } from './Audio';
+import {
+  AudioEngine, RECIPES, SIREN_TUNING, choirBlast, klaxonBlast, klaxonGap, note, type Recipe, type SirenConfig, type SoundName,
+} from './Audio';
 
 export interface SoundVariant {
   id: string;
   name: string;
   note: string;
   recipe: Recipe;
+  /** For the escape alarm: the siren bed that goes with this klaxon. */
+  siren?: SirenConfig;
 }
 
 /** Sounds the lab can audition alternatives for. */
-export type VariantSound = Extract<SoundName, 'laser' | 'explosion' | 'hit'>;
+export type VariantSound = Extract<SoundName, 'laser' | 'explosion' | 'hit' | 'klaxon'>;
 
 /**
  * Alternative recipes for the sound lab (/soundlab.html). Variant A of each
  * is the one the game plays now; pick another and copy it into RECIPES.
  */
+
+/** Steps through a chord progression, one chord per call (each klaxon blast plays the next). */
+function progression(chords: number[][]): () => number[] {
+  let i = 0;
+  return () => chords[i++ % chords.length];
+}
+
+/** Low minor chord tones, in semitones above A1: i, VI, iv, V and friends. */
+const Am = [0, 3, 7], F = [-4, 0, 3], Dm = [5, 8, 12], E = [7, 11, 14], Bb = [1, 5, 8];
+
+function chordStab(a: AudioEngine, o: AudioNode, t: number, chord: number[], dur: number, k: number): void {
+  const d = a.drive(o, 3, t, dur);
+  for (const s of chord) a.pad(d, t, 'sawtooth', note(s), dur, 0.07 * k, 0.01, dur * 0.6, 1400, 160, 10);
+  a.tone(o, t, 'sine', note(chord[0] - 12), note(chord[0] - 12), dur, 0.75 * k, 0.005);
+  a.noiseBurst(o, t, 'lowpass', 600, 40, dur * 0.5, 0.25 * k);
+}
+
+/** The original escape siren: a 700 Hz square wave swept by a slow LFO. */
+const HIGH_SIREN: SirenConfig = {
+  type: 'square', freq: 700, second: 0, depth: 180, cutoff: 1800, filterDepth: 0, q: 1, level: 1, rate: [0.8, 3],
+};
+
+/** Klaxon loudness in the A + F mixes, so it cuts through the choir. */
+const KLAXON_OVER_CHOIR = 2.5;
+
+const doom = progression([Am, F, Dm, E]);
+const cathedral = progression([Am, F, Dm, Bb]);
+const braamRoots = progression([[0], [1]]);
+const tritone = progression([[0], [6]]);
+
 export const SOUND_VARIANTS: Record<VariantSound, SoundVariant[]> = {
   laser: [
     { id: 'A', name: 'Current', note: 'What the game plays now: Pulse blaster, two hammer pulses over a sub.', recipe: RECIPES.laser },
@@ -179,6 +213,83 @@ export const SOUND_VARIANTS: Record<VariantSound, SoundVariant[]> = {
         a.tone(d, t, 'sawtooth', 62, 28, dur, 0.3 * k, 0.01);
         a.noiseBurst(o, t, 'lowpass', 700, 40, dur, 0.55 * k, 2);
       },
+    },
+  ],
+
+  klaxon: [
+    {
+      id: 'A', name: 'Current', note: 'What the game plays now (was H): the choir chords with a low klaxon inside them, over a low wail.',
+      recipe: RECIPES.klaxon, siren: { ...SIREN_TUNING },
+    },
+    {
+      id: 'B', name: 'Doom stabs', note: 'Distorted low chord stabs, Am → F → Dm → E, over a growling fifth drone.',
+      siren: { type: 'sawtooth', freq: 55, second: 1.5, depth: 0.6, cutoff: 220, filterDepth: 120, q: 4, level: 1.8, rate: [0.15, 0.6] },
+      recipe: (a, o, t, u) => {
+        const gap = klaxonGap(u);
+        chordStab(a, o, t, doom(), gap * 0.85, (0.75 + 0.25 * u) * 0.75);
+      },
+    },
+    {
+      id: 'C', name: 'Cathedral', note: 'Slow swelling organ-like chords, Am → F → Dm → B♭, over a deep sub hum. Brighter as time runs out.',
+      siren: { type: 'sine', freq: 41.2, second: 2, depth: 0, cutoff: 200, filterDepth: 0, q: 1, level: 2.2, rate: [0.2, 0.8] },
+      recipe: (a, o, t, u) => {
+        const gap = klaxonGap(u);
+        const dur = gap * 1.1;
+        const k = (0.75 + 0.25 * u) * 0.75;
+        const chord = cathedral();
+        for (const s of chord) {
+          a.pad(o, t, 'sawtooth', note(s + 12), dur, 0.05 * k, dur * 0.35, dur * 0.4, 380 + 900 * u, 500 + 900 * u, 7);
+          a.pad(o, t, 'triangle', note(s), dur, 0.09 * k, dur * 0.3, dur * 0.4, 600, 600, 4);
+        }
+        a.tone(o, t, 'sine', note(chord[0] - 12), note(chord[0] - 12), dur, 0.6 * k, dur * 0.25);
+      },
+    },
+    {
+      id: 'D', name: 'Braam', note: 'A huge brassy blast that opens up, alternating A and B♭ a semitone apart, over a low buzzing bed.',
+      siren: { type: 'square', freq: 41.2, second: 0.5, depth: 0, cutoff: 160, filterDepth: 60, q: 2, level: 1.4, rate: [0.3, 1.2] },
+      recipe: (a, o, t, u) => {
+        const gap = klaxonGap(u);
+        const dur = gap * 0.9;
+        const k = (0.75 + 0.25 * u) * 0.6;
+        const root = braamRoots()[0];
+        const d = a.drive(o, 4, t, dur);
+        for (const s of [root, root + 7, root + 12]) a.pad(d, t, 'sawtooth', note(s), dur, 0.08 * k, 0.04, dur * 0.5, 180, 1600, 15, 2);
+        a.tone(o, t, 'sine', note(root - 12), note(root - 12), dur, 0.8 * k, 0.01);
+      },
+    },
+    {
+      id: 'E', name: 'Tritone pulse', note: 'Two heavy hits per blast, a tritone apart, with a faint dissonant ring above. Tense rather than tuneful.',
+      siren: { type: 'sawtooth', freq: 55, second: Math.SQRT2, depth: 0, cutoff: 300, filterDepth: 200, q: 3, level: 1, rate: [0.5, 4] },
+      recipe: (a, o, t, u) => {
+        const gap = klaxonGap(u);
+        const k = (0.75 + 0.25 * u) * 0.55;
+        const [s] = tritone();
+        for (const [dt, semi] of [[0, s], [gap / 2, s + 6]]) {
+          const d = a.drive(o, 5, t + dt, gap / 2);
+          a.pad(d, t + dt, 'square', note(semi), gap * 0.4, 0.12 * k, 0.005, gap * 0.3, 900, 120, 6);
+          a.tone(o, t + dt, 'sine', note(semi - 12), note(semi - 24), gap * 0.4, 0.85 * k, 0.003);
+        }
+        a.tone(o, t, 'sine', note(24), note(24), gap * 0.8, 0.03 * k, 0.1);
+        a.tone(o, t, 'sine', note(25), note(25), gap * 0.8, 0.03 * k, 0.1);
+      },
+    },
+    {
+      id: 'F', name: 'Low siren and choir', note: 'A slow, low air-raid wail, with dark "ahh" voices singing Am → Dm → E → Am on each blast.',
+      siren: SIREN_TUNING,
+      recipe: choirBlast,
+    },
+    {
+      id: 'G', name: 'Klaxon over choir', note: 'A and F together: the original-pitch klaxon blast over the choir chords, with the low wail as the bed.',
+      siren: SIREN_TUNING,
+      recipe: (a, o, t, u) => {
+        choirBlast(a, o, t, u);
+        klaxonBlast(a, o, t, u, 1, KLAXON_OVER_CHOIR);
+      },
+    },
+    {
+      id: 'H', name: 'Previous alarm', note: 'The original: a high square-wave klaxon over a 700 Hz siren.',
+      siren: HIGH_SIREN,
+      recipe: (a, o, t, u) => klaxonBlast(a, o, t, u, 1, 1),
     },
   ],
 };

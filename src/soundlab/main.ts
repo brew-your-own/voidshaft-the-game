@@ -1,21 +1,23 @@
 /**
  * Sound lab: a dev page (/soundlab.html) to audition variants of the laser,
- * explosion and hit sounds through the game's own AudioEngine, and to tune
+ * explosion, hit and escape alarm sounds through the game's own AudioEngine, and to tune
  * the effects-bus bass shelf and reverb. Click a card to play and select it.
  */
 import './style.css';
 import { AUDIO_TUNING, AudioEngine, type AudioMix } from '../audio/Audio';
 import { SOUND_VARIANTS, type VariantSound } from '../audio/variants';
+import { ESCAPE_TUNING } from '../fx/EscapeSequence';
 
 const audio = new AudioEngine();
 const SOUNDS: { key: VariantSound; title: string; hint: string }[] = [
   { key: 'laser', title: 'Laser', hint: 'Your primary weapon: fires 5 times a second.' },
   { key: 'explosion', title: 'Explosion', hint: 'Robots and the reactor blowing up. Size 1 is a small robot, 3 the reactor.' },
   { key: 'hit', title: 'Hit', hint: 'You take damage. Severity follows the damage, like the red flash.' },
+  { key: 'klaxon', title: 'Escape alarm', hint: 'After the reactor dies: a siren bed plus a blast every 2.6 s, speeding up to every 0.9 s as time runs out. A card plays 8 s at the urgency below; the preview runs a 20 s escape, ending with the countdown voice.' },
 ];
 
-const selected: Record<VariantSound, string> = { laser: 'A', explosion: 'A', hit: 'A' };
-const params = { size: 1.5, severity: 0.6 };
+const selected: Record<VariantSound, string> = { laser: 'A', explosion: 'A', hit: 'A', klaxon: 'A' };
+const params = { size: 1.5, severity: 0.6, urgency: 0.4 };
 const mix: AudioMix = { ...AUDIO_TUNING };
 let ambient = false;
 
@@ -46,6 +48,8 @@ root.innerHTML = `
         ${s.key === 'laser' ? '<button data-act="burst">▶ Burst of 8 shots</button>' : ''}
         ${s.key === 'explosion' ? slider('size', 'Size', 0.5, 3, 0.1, params.size, '') : ''}
         ${s.key === 'hit' ? slider('severity', 'Severity', 0, 1, 0.05, params.severity, '') : ''}
+        ${s.key === 'klaxon' ? `${slider('urgency', 'Urgency', 0, 1, 0.05, params.urgency, '')}
+          <button data-act="escape">▶ Escape preview (20 s)</button><button data-act="stop">■ Stop</button>` : ''}
       </div>
       <div class="cards">
         ${SOUND_VARIANTS[s.key].map((v) => `
@@ -73,16 +77,59 @@ function fmt(v: number): string {
 
 function apply(): void {
   for (const s of SOUNDS) {
-    audio.overrides[s.key] = SOUND_VARIANTS[s.key].find((v) => v.id === selected[s.key])!.recipe;
+    audio.overrides[s.key] = variant(s.key).recipe;
   }
+  const siren = variant('klaxon').siren;
+  if (siren) audio.setSiren(siren);
   audio.setMix(mix);
   for (const el of root.querySelectorAll<HTMLElement>('.sound')) {
     const key = el.dataset.sound as VariantSound;
     for (const c of el.querySelectorAll<HTMLElement>('.card')) c.classList.toggle('on', c.dataset.variant === selected[key]);
   }
   root.querySelector('[data-summary]')!.textContent =
-    `laser ${selected.laser} · explosion ${selected.explosion} · hit ${selected.hit} · ` +
+    `laser ${selected.laser} · explosion ${selected.explosion} · hit ${selected.hit} · alarm ${selected.klaxon} · ` +
     `bass +${fmt(mix.bassDb)} dB @ ${mix.bassFreq} Hz · reverb ${fmt(mix.reverb)}, ${fmt(mix.reverbDecay)} s tail`;
+}
+
+function variant(key: VariantSound) {
+  return SOUND_VARIANTS[key].find((v) => v.id === selected[key])!;
+}
+
+/**
+ * Runs the escape alarm as the game does: siren on, a klaxon each time the
+ * gap at the current urgency runs out, the countdown voice in the last ten
+ * seconds. `urgencyAt(t)` gives urgency at t seconds in; `seconds` is the length.
+ */
+let alarmTimer = 0;
+function runAlarm(seconds: number, urgencyAt: (t: number) => number, voice: boolean): void {
+  stopAlarm();
+  const start = performance.now();
+  let next = 0;
+  let lastSecond = -1;
+  const tick = () => {
+    const t = (performance.now() - start) / 1000;
+    if (t >= seconds) { stopAlarm(); return; }
+    const u = urgencyAt(t);
+    audio.setAlarm(true, u);
+    if (t >= next) {
+      audio.play('klaxon', undefined, u);
+      const [slow, fast] = ESCAPE_TUNING.klaxonInterval;
+      next = t + slow + (fast - slow) * u;
+    }
+    const left = seconds - t;
+    if (voice && left < ESCAPE_TUNING.finalSeconds) {
+      const second = Math.ceil(left);
+      if (second !== lastSecond) { lastSecond = second; audio.play('countdown', undefined, second); }
+    }
+  };
+  tick();
+  alarmTimer = window.setInterval(tick, 20);
+}
+
+function stopAlarm(): void {
+  window.clearInterval(alarmTimer);
+  alarmTimer = 0;
+  audio.setAlarm(false);
 }
 
 function play(key: VariantSound, at = 0): void {
@@ -103,11 +150,17 @@ root.addEventListener('click', (e) => {
     const key = card.closest<HTMLElement>('.sound')!.dataset.sound as VariantSound;
     selected[key] = card.dataset.variant!;
     apply();
-    play(key);
+    if (key === 'klaxon') runAlarm(8, () => params.urgency, false);
+    else play(key);
     return;
   }
   const act = target.closest<HTMLElement>('[data-act]')?.dataset.act;
   if (act === 'burst') burst(8);
+  else if (act === 'escape') {
+    // 20 s compressed escape: urgency climbs, and the last 10 s are full panic, as in the game.
+    const len = 20;
+    runAlarm(len, (t) => Math.max(t / len, t > len - ESCAPE_TUNING.finalSeconds ? 1 : 0), true);
+  } else if (act === 'stop') stopAlarm();
   else if (act === 'combat') {
     burst(6);
     play('hit', 1.0);
@@ -135,6 +188,7 @@ root.addEventListener('input', (e) => {
   out.textContent = out.textContent!.replace(/^[\d.]+/, fmt(v));
   if (key === 'size') params.size = v;
   else if (key === 'severity') params.severity = v;
+  else if (key === 'urgency') params.urgency = v;
   else if (key === 'volume') audio.setVolumes(v, 0.9, ambient ? 0.5 : 0);
   else (mix as unknown as Record<string, number>)[key] = v;
   apply();

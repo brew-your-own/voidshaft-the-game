@@ -1,5 +1,5 @@
 import { Color, Vector3, type Camera } from 'three';
-import { NO_SOUND, type SoundSink } from '../audio/Audio';
+import { KLAXON_INTERVAL, NO_SOUND, type SoundSink } from '../audio/Audio';
 import { NO_EFFECTS, type Effects } from '../combat/types';
 import type { MissionState } from '../game/Objective';
 import type { DoorState, Level } from '../level/Level';
@@ -30,7 +30,7 @@ export const ESCAPE_TUNING = {
   /** Final stretch: the last N seconds count as full panic whatever the countdown. */
   finalSeconds: 10,
   /** Klaxon blast period in seconds, calm → panic. */
-  klaxonInterval: [2.6, 0.9] as const,
+  klaxonInterval: KLAXON_INTERVAL,
   /** Seconds between spark/debris showers, calm → panic. */
   sparkInterval: [1.6, 0.22] as const,
   /** Showers spawn on walls within this distance of the player. */
