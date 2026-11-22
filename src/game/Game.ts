@@ -28,6 +28,7 @@ import { createNeonEnvironment } from '../render/NeonEnvironment';
 import { createRenderer, type RenderContext } from '../render/Renderer';
 import { ResolutionGovernor } from '../render/Resolution';
 import { HUD } from '../ui/HUD';
+import { EnemyViewer } from '../ui/EnemyViewer';
 import { MapViewer } from '../ui/MapViewer';
 import { Menu } from '../ui/Menu';
 import { Objective } from './Objective';
@@ -91,6 +92,7 @@ export class Game {
   private readonly automap: AutomapView;
   private mapOpen = false;
   private readonly viewer: MapViewer;
+  private readonly enemies: EnemyViewer;
   private readonly staticLights: StaticLights;
 
   constructor(
@@ -121,8 +123,17 @@ export class Game {
         window.location.assign(url);
       },
       onViewMap: (id) => this.openViewer(id, levels.current === id ? levelData : null),
+      onViewEnemies: () => {
+        this.menu.hide();
+        this.hud.root.classList.add('viewer');
+        this.enemies.open();
+      },
     }, levels);
     this.viewer = new MapViewer(hudRoot, canvas, () => {
+      hudRoot.classList.remove('viewer');
+      this.menu.show('main');
+    });
+    this.enemies = new EnemyViewer(hudRoot, canvas, () => {
       hudRoot.classList.remove('viewer');
       this.menu.show('main');
     });
@@ -295,6 +306,12 @@ export class Game {
     if (this.viewer.active) {
       this.ctx.renderer.info.reset();
       this.viewer.render(this.ctx, this.camera.aspect, dt);
+      requestAnimationFrame(this.frame);
+      return;
+    }
+    if (this.enemies.active) {
+      this.ctx.renderer.info.reset();
+      this.enemies.render(this.ctx, this.camera.aspect, dt);
       requestAnimationFrame(this.frame);
       return;
     }

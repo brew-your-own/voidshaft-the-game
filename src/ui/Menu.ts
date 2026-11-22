@@ -12,6 +12,8 @@ export interface MenuCallbacks {
   onSelectLevel(id: string): void;
   /** Show a level's map without playing it. */
   onViewMap(id: string): void;
+  /** Show the enemy screen. */
+  onViewEnemies(): void;
 }
 
 /** The level list on the title screen. */
@@ -102,10 +104,12 @@ export class Menu {
             <p class="mission">Find the keys, destroy the reactor, then escape through the exit before the mine collapses.</p>
             <div class="levels">${this.levelRows()}</div>
             <nav class="inline">
+              <button data-act="enemies">ENEMIES</button>
               <button data-go="settings">SETTINGS</button>
               <button data-go="controls">CONTROLS</button>
             </nav>
             <p class="hint">Mouse to steer · Tab for the map · Esc to pause</p>
+            <p class="version">${escapeHtml(__APP_VERSION__)}</p>
           </div>`;
         break;
       case 'pause':
@@ -197,6 +201,7 @@ export class Menu {
     switch (el.dataset.act) {
       case 'play': this.cb.onPlay(); break;
       case 'restart': this.cb.onRestart(); break;
+      case 'enemies': this.cb.onViewEnemies(); break;
       case 'back': this.show(this.parent); break;
       case 'reset-settings': {
         const bindings = this.settings.data.bindings;

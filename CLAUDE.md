@@ -16,6 +16,8 @@ npm run levels     # export src/level/levels/*.ts → public/levels/*.json
 npm run build      # levels + typecheck + vite build
 ```
 
+`vite.config.ts` injects `git describe` as `__APP_VERSION__` (shown on the title screen) and reads the `BASE_PATH` env var as Vite's `base` (the Pages workflow sets it to `/<repo>/`). Releases: push a `v*` tag.
+
 After editing a level source, run `npm run levels`: the game loads the exported JSON, not the TS source. New levels go in `LEVEL_SOURCES` (`src/level/levels/index.ts`); its order is the order on the title screen. Check a level's layout with its MAP button.
 
 Levels 02–06 are `GridLayout` maps: one string array per floor, one character per cell, colours from the legend; robots, pickups and lights are placed by `[column, row, floor]` through `levels/parts.ts`. `tests/levels.test.ts` checks every level for solvability (blue → gold → red → reactor → exit), overlaps, flat faces and wall clearance, so run `npm test` after a layout change.
@@ -28,15 +30,16 @@ Levels 02–06 are `GridLayout` maps: one string array per floor, one character 
 | `src/level/` | Segment data types, `LevelBuilder` (extrusion-based authoring), `GridLayout` (ASCII-map authoring on a sheared lattice), `progression` (solvability check), `Level` (segment lookup, line of sight, BFS `findPath`, nearby walls and doors), loader and validation, level index (`levelIndex`: summaries, which level to load), mesh builder, automap lines and seen-segment memory, level sources |
 | `src/physics/` | `Ship` (6DOF body), `Collision` (sphere against wall triangles, with sliding) |
 | `src/combat/` | `ProjectileSystem` (swept hits, homing, `explode` splash damage), player weapons, raycasts, the `Effects` interface |
-| `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, tuning, models in `RobotMeshes`, shape helpers and merging in `meshKit`, design `proposals`) |
+| `src/entities/` | `Door`, `Pickup`, `Target`, `Reactor` (the boss), `robots/` (`Robot` AI, tuning, models in `RobotMeshes`, shape helpers and merging in `meshKit`, design `proposals`, enemy-screen text in `bestiary`) |
 | `src/fx/` | Particles, a fixed `LightPool` for flashes, `StaticLights` (12 slots showing the level lights nearest the camera), `GameEffects` |
 | `src/audio/` | `AudioEngine`: all sounds synthesised with WebAudio |
 | `src/render/` | Renderer and bloom (with resolution scaling), adaptive `ResolutionGovernor`, palette, materials (where textures will plug in later), portal culler, `AutomapView`, `NeonEnvironment` (reflection map for robot hulls) |
 | `src/shipyard/`, `shipyard.html` | Dev-only turntable page for robot models and proposals |
-| `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (title screen with the level list, pause, settings, controls), `MapViewer` (whole-level map from the title screen) |
+| `src/ui/` | `HUD` (DOM overlay, end screen), `Menu` (title screen with the level list, pause, settings, controls), `MapViewer` (whole-level map from the title screen), `EnemyViewer` (robot turntable and stats from the title screen) |
 | `src/input/` | Keyboard through the player's bindings, pointer-locked mouse |
 | `tests/` | Vitest suites per area |
 | `tools/buildLevels.ts` | Level JSON exporter |
+| `.github/workflows/pages.yml` | Tests, builds and publishes to GitHub Pages when a `v*` tag is pushed |
 
 ## Conventions
 
